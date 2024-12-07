@@ -16,7 +16,7 @@ class PersonaHandler(LLMHandler):
 
     def load_system_prompt(self) -> str:
         """Load the system prompt from personas.json based on the persona name."""
-        json_file = os.path.join(os.path.dirname(__file__), "personas.json")
+        json_file = os.path.join(os.path.dirname(__file__), "../personas.json")
 
         # check we have a personas json
         if not os.path.exists(json_file):
