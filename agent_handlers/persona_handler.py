@@ -1,8 +1,6 @@
 # persona_handler.py
 import json
 import os
-from typing import Dict, List
-from llm_client import LLMClient
 from agent_handlers.llm_handler import LLMHandler
 
 class PersonaHandler(LLMHandler):
