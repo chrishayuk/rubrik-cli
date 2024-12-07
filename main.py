@@ -21,6 +21,9 @@ def main():
     # persona name (required if mode is persona)
     parser.add_argument("--persona", default=None, help="Name of the persona (required if mode is 'persona')")
 
+    # stream flag
+    parser.add_argument("--stream", action="store_true", help="Enable streaming mode for responses")
+
     # parse arguments
     args = parser.parse_args()
 
@@ -37,7 +40,8 @@ def main():
         mode=args.mode,
         provider=args.provider,
         model=args.model,
-        persona=args.persona
+        persona=args.persona,
+        stream=args.stream  # pass the stream flag
     )
 
     # kick off

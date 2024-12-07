@@ -2,6 +2,10 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
+class ConversationEndedError(Exception):
+    """Raised when the conversation unexpectedly ends or no more messages are available."""
+    pass
+
 class ConversationIO(ABC):
     @abstractmethod
     async def start_conversation(self):
@@ -10,7 +14,10 @@ class ConversationIO(ABC):
 
     @abstractmethod
     async def listen(self) -> Dict[str, Any]:
-        """Wait and listen for the next message in the conversation."""
+        """
+        Wait and listen for the next message in the conversation.
+        If the conversation ends, raise ConversationEndedError.
+        """
         pass
 
     @abstractmethod

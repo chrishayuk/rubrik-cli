@@ -3,11 +3,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.theme import Theme
+from rich.live import Live  # Import Live for dynamic updates
 
-from human_handler import HumanHandler
-from llm_handler import LLMHandler
-from persona_handler import PersonaHandler
-from transport.conversation_io import ConversationIO  # Add this import
+from agent_handlers.human_handler import HumanHandler
+from agent_handlers.llm_handler import LLMHandler
+from agent_handlers.persona_handler import PersonaHandler
+from transport.conversation_io import ConversationIO, ConversationEndedError
 
 custom_theme = Theme({
     "questioner": "bold magenta",
@@ -29,11 +30,13 @@ class ChatHandler:
                  mode: str = "human", 
                  provider: str = "ollama", 
                  model: str = "llama3.3", 
-                 persona: str = None):
+                 persona: str = None,
+                 stream: bool = False):
         self.conversation_io = conversation_io
         self.mode = mode
         self.provider = provider
         self.model = model
+        self.stream = stream
         self.conversation = []
 
         if self.mode == "human":
@@ -66,34 +69,64 @@ class ChatHandler:
         console.print("[bold yellow]Starting our conversation...[/bold yellow]\n")
         await self.conversation_io.start_conversation()
 
-        # Wait for the first message from the other side
+        # Receive the initial question
         initial_prompt = await self.conversation_io.listen()
         role = initial_prompt.get("role", "Unknown")
         question = initial_prompt.get("message", "")
 
-        # Display the opening message and remember it
+        # Display the question
         self.display_message(role, question)
         self.add_message(role, question)
 
-        # Use our chosen style (human, llm, or persona) to craft a response
-        answer = self.responder_handler.get_response(question, self.conversation)
+        # check if streaming is enabled
+        if self.stream and hasattr(self.responder_handler, "get_response_stream"):
+            # Use a Live context to dynamically update the panel
+            answer = ""
+            style_name = role_styles.get("Responder", "unknown")
 
-        # Add our reply and send it back to continue the exchange
-        self.add_message("Responder", answer)
+            # Create an empty panel to start
+            text_content = Text("", style=style_name)
+            panel = Panel(text_content, title="Responder", subtitle="", border_style=style_name, expand=True)
+
+            # Use Live for dynamic updates
+            with Live(panel, console=console, refresh_per_second=4, transient=True) as live:
+                for token in self.responder_handler.get_response_stream(question, self.conversation):
+                    answer += token
+                    # Update the panel content with the accumulated answer
+                    text_content = Text(answer, style=style_name)
+                    updated_panel = Panel(text_content, title="Responder", subtitle="", border_style=style_name, expand=True)
+                    live.update(updated_panel)
+
+            # After streaming is done, print a final panel outside of Live
+            self.add_message("Responder", answer)
+            self.display_message("Responder", answer)
+        else:
+            # Non-streaming response
+            answer = self.responder_handler.get_response(question, self.conversation)
+            self.add_message("Responder", answer)
+            self.display_message("Responder", answer)
+
+        # Send the answer back to the server
         response_msg = {
             "role": "Responder",
             "message": answer
         }
         await self.conversation_io.respond(response_msg)
-        self.display_message("Responder", answer)
 
-        # Wait to see how the other side reacts or evaluates our answer
-        follow_up = await self.conversation_io.listen()
+        # Listen for follow-up
+        try:
+            follow_up = await self.conversation_io.listen()
+        except ConversationEndedError:
+            console.print("[bold red]The conversation ended unexpectedly. No further messages received.[/bold red]")
+            await self.conversation_io.end_conversation()
+            console.print("[bold yellow]The conversation has concluded. Thank you.[/bold yellow]\n")
+            return
+
         v_role = follow_up.get("role", "Unknown")
         v_msg = follow_up.get("message", "")
         self.display_message(v_role, v_msg)
         self.add_message(v_role, v_msg)
 
-        # Gently bring this conversation to a close
+        # End conversation
         await self.conversation_io.end_conversation()
         console.print("[bold yellow]The conversation has concluded. Thank you.[/bold yellow]\n")
