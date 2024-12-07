@@ -3,11 +3,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.theme import Theme
-from rich.live import Live  # Import Live for dynamic updates
+from rich.live import Live
 
+# agent handlers
 from agent_handlers.human_handler import HumanHandler
 from agent_handlers.llm_handler import LLMHandler
 from agent_handlers.persona_handler import PersonaHandler
+
+# transport
 from transport.conversation_io import ConversationIO, ConversationEndedError
 
 custom_theme = Theme({
@@ -63,6 +66,7 @@ class ChatHandler:
         console.print(panel)
 
     def add_message(self, role: str, content: str):
+        # add message to the conversation
         self.conversation.append({"role": role.lower(), "content": content})
 
     async def run(self):
