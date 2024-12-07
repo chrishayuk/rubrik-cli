@@ -1,0 +1,13 @@
+[project]
+name = "rubrik-cli"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ollama>=0.4.3",
+    "openai>=1.57.0",
+    "python-dotenv>=1.0.1",
+    "rich>=13.9.4",
+    "websockets>=14.1",
+]
