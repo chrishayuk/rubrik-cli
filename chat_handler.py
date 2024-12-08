@@ -6,11 +6,9 @@ from rich.theme import Theme
 from rich.live import Live
 import asyncio
 
-# agent handlers
 from agent_handlers.human_handler import HumanHandler
 from agent_handlers.llm_handler import LLMHandler
 from agent_handlers.persona_handler import PersonaHandler
-
 from adapters.output.server_output_adapter import ServerOutputAdapter
 
 custom_theme = Theme({
@@ -144,7 +142,7 @@ class ChatHandler:
         if hasattr(self.output_adapter, "start"):
             await self.output_adapter.start()
 
-        # If in human mode and not a server, print the initial prompt immediately
+        # If human client mode, print initial prompt once at startup
         if self.mode == "human" and not self.server:
             console.print()
             await self.print_prompt(server_mode=False)
@@ -152,7 +150,6 @@ class ChatHandler:
         if self.server:
             await self.handle_server_input()
         else:
-            # handle_user_input does not print the prompt now; we already printed it above for startup
             user_input_task = asyncio.create_task(self.handle_user_input())
             tasks = [user_input_task]
 
@@ -164,7 +161,6 @@ class ChatHandler:
 
         await self._cleanup()
         self.print_panel("Chat", "The conversation has concluded. Thank you.", "system")
-
 
     async def handle_server_input(self):
         while True:
@@ -185,22 +181,22 @@ class ChatHandler:
             self.add_message("responder", answer)
 
             if self.stream and hasattr(self.responder_handler, "get_response_stream"):
+                # Streaming: only send partial=False with no message at end
                 await self.output_adapter.write_message({
                     "role": "Responder",
-                    "message": answer,
                     "partial": False
                 })
             else:
+                # Non-streaming: send full answer once
                 await self.output_adapter.write_message({
                     "role": "Responder",
                     "message": answer
                 })
-                # Display final answer locally (non-streaming)
                 self.display_message("responder", answer)
 
+
     async def handle_user_input(self):
-        # No prompt printing here. This just reads from input_adapter.
-        # The prompt will be printed by handle_server_messages() after messages.
+        # Doesn't print prompt here, prompt is printed initially at startup and after server messages
         while True:
             try:
                 user_msg = await self.input_adapter.read_message()
@@ -235,25 +231,27 @@ class ChatHandler:
 
             if partial:
                 if not is_streaming:
+                    # Start streaming
                     is_streaming = True
                     streaming_answer = s_content
                     display_role, style_name = self.role_to_display_name(s_role)
 
-                    # No transient, final panel stays after exit
+                    # Start live with no transient so final panel stays
                     text_content = Text(streaming_answer, style=style_name)
                     panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
                     live_instance = Live(panel, console=console, refresh_per_second=10)
                     live_instance.__enter__()
                 else:
+                    # Continue streaming
                     streaming_answer += s_content
                     text_content = Text(streaming_answer, style=style_name)
                     updated_panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
                     live_instance.update(updated_panel)
                     live_instance.refresh()
             else:
-                # partial=False means streaming ended or a normal message
+                # partial=False means streaming ended or normal message
                 if is_streaming:
-                    # End streaming, final panel remains
+                    # End streaming. No final message in s_content, just end it
                     live_instance.__exit__(None, None, None)
                     live_instance = None
                     is_streaming = False
@@ -261,18 +259,19 @@ class ChatHandler:
                     display_role = None
                     style_name = None
 
-                    # After streaming ends, print newline and prompt here
+                    # Print newline and prompt after streaming ends
                     console.print()
                     await self.print_prompt(server_mode=False)
                 else:
-                    # Non-streaming message
-                    self.display_message(s_role, s_content)
+                    # Non-streaming message, just print once
+                    if s_content:
+                        self.display_message(s_role, s_content)
                     console.print()
                     await self.print_prompt(server_mode=False)
 
     async def _get_response(self, question: str) -> str:
         if self.stream and hasattr(self.responder_handler, "get_response_stream"):
-            # Streaming mode: send only partial tokens here.
+            # Streaming mode: send only partial tokens
             answer = ""
             style_name = "assistant"
             display_role = self.local_name
@@ -295,6 +294,7 @@ class ChatHandler:
                         "partial": True
                     })
 
+            # Return full answer, but we do NOT send it here. handle_server_input() handles final partial=False.
             return answer
         else:
             # Non-streaming mode
@@ -302,7 +302,6 @@ class ChatHandler:
                 answer = await self.responder_handler.get_response(question, self.conversation)
             else:
                 answer = self.responder_handler.get_response(question, self.conversation)
-
             return answer
 
     async def _cleanup(self):
@@ -312,6 +311,6 @@ class ChatHandler:
             await self.output_adapter.stop()
 
     async def print_prompt(self, server_mode=False):
-        # Print prompt only, no newline
+        # Print prompt without newline
         await asyncio.sleep(0.05)
         console.print(">:", end=" ", style="system")

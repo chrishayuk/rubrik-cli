@@ -13,7 +13,6 @@ class LLMHandler:
         self.llm_client = LLMClient(provider=provider, model=model)
 
     def _build_messages(self, question: str, conversation: List[Dict]) -> List[Dict]:
-        # clear messages
         msgs = []
 
         # If a system prompt is set, add it as the first message
@@ -29,11 +28,9 @@ class LLMHandler:
                 role = "assistant"
             msgs.append({"role": role, "content": msg["content"]})
 
-        # Add the new user question
-        msgs.append({"role": "user", "content": question})
-
-        # return messages
+        # return the messages
         return msgs
+
 
     def get_response(self, question: str, conversation: List[Dict]) -> str:
         # build messages
