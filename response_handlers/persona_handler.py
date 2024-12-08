@@ -1,7 +1,7 @@
-# persona_handler.py
+# response_handlers/persona_handler.py
 import json
 import os
-from agent_handlers.llm_handler import LLMHandler
+from response_handlers.llm_handler import LLMHandler
 
 class PersonaHandler(LLMHandler):
     def __init__(self, persona_name: str, provider: str = "ollama", model: str = "llama3.3"):

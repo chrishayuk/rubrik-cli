@@ -3,9 +3,12 @@ import asyncio
 
 # handlers
 from chat_handler import ChatHandler
-from agent_handlers.llm_handler import LLMHandler
-from agent_handlers.human_handler import HumanHandler
-from agent_handlers.persona_handler import PersonaHandler
+
+# response handlers
+from response_handlers.llm_handler import LLMHandler
+from response_handlers.human_handler import HumanHandler
+from response_handlers.persona_handler import PersonaHandler
+from response_handlers.forwarder_handler import ForwarderHandler
 
 # input adapters
 from adapters.input.human_input_adapter import HumanInput
@@ -35,6 +38,8 @@ async def run_chat(args, message_queue):
         responder = HumanHandler()
     elif args.mode == "llm":
         responder = LLMHandler(provider=args.provider, model=args.model)
+    elif args.mode == "forwarder":
+        responder = ForwarderHandler()
     else:
         responder = PersonaHandler(persona_name=args.persona, provider=args.provider, model=args.model)
 
@@ -95,8 +100,8 @@ async def run_app(args):
 def main():
     parser = argparse.ArgumentParser(description="Chat Handler Client")
 
-    parser.add_argument("--mode", choices=["human", "llm", "persona"], default="human",
-                        help="Mode of operation: 'human', 'llm', or 'persona'")
+    parser.add_argument("--mode", choices=["human", "llm", "persona", "forwarder"], default="human",
+                        help="Mode of operation: 'human', 'llm', 'persona' or 'forwarder'")
 
     parser.add_argument("--provider", choices=["openai", "ollama"], default="ollama",
                         help="LLM provider")

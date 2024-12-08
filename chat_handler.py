@@ -6,10 +6,11 @@ from rich.theme import Theme
 from rich.live import Live
 import asyncio
 
-from agent_handlers.human_handler import HumanHandler
-from agent_handlers.llm_handler import LLMHandler
-from agent_handlers.persona_handler import PersonaHandler
+from response_handlers.human_handler import HumanHandler
+from response_handlers.llm_handler import LLMHandler
+from response_handlers.persona_handler import PersonaHandler
 from adapters.output.server_output_adapter import ServerOutputAdapter
+from response_handlers.forwarder_handler import ForwarderHandler
 
 custom_theme = Theme({
     "you": "bold magenta",
@@ -52,6 +53,9 @@ class ChatHandler:
                 raise ValueError("persona is required when mode=persona")
             self.responder_handler = PersonaHandler(persona_name=self.persona, provider=self.provider, model=self.model)
             local_mode_desc = f"Persona ({self.persona}, {self.provider}/{self.model})"
+        elif self.mode == "forwarder":
+            self.responder_handler = ForwarderHandler()
+            local_mode_desc = "forwarder"
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
