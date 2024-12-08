@@ -43,7 +43,6 @@ class ChatHandler:
         self.server = server
         self.conversation = []
 
-        # Determine the local role description based on mode
         if self.mode == "human":
             self.responder_handler = HumanHandler()
             local_mode_desc = "Human"
@@ -58,13 +57,10 @@ class ChatHandler:
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
-        # Define local_name and remote_name depending on server or client
         if self.server:
-            # Server is typically the "Assistant"
             self.local_name = f"Assistant ({local_mode_desc}, Server)"
             self.remote_name = "Questioner (Client)"
         else:
-            # Client
             self.local_name = f"You ({local_mode_desc}, Client)"
             self.remote_name = "Assistant (Server)"
 
@@ -82,20 +78,7 @@ class ChatHandler:
         self.conversation.append({"role": role.lower(), "content": content})
 
     def role_to_display_name(self, role: str) -> (str, str):
-        # Given an internal message role ("questioner", "responder", etc.),
-        # return (display_role, style_name).
-        # Use local_name for messages originating from local side based on role,
-        # and remote_name for the other side.
-        
-        # Normalize role
         r = role.lower()
-
-        # On the server:
-        # - questioner messages come from the client => remote_name
-        # - responder messages come from the server => local_name
-        # On the client:
-        # - questioner messages come from the client (local) => local_name
-        # - responder messages come from the server => remote_name
 
         if self.server:
             if r == "questioner":
@@ -103,24 +86,15 @@ class ChatHandler:
             elif r == "responder":
                 display_role = self.local_name
             else:
-                # For unrecognized roles, just show role capitalized
                 display_role = role.capitalize()
         else:
-            # Client
             if r == "questioner":
-                # That's the local user's messages
                 display_role = self.local_name
             elif r == "responder":
-                # That's the server responding
                 display_role = self.remote_name
             else:
                 display_role = role.capitalize()
 
-        # Determine style name from display_role
-        # We'll pick style based on keywords:
-        # if 'assistant' in name.lower(): style = 'assistant'
-        # if 'you' or 'human' in name.lower(): style = 'you'
-        # else unknown
         lower_disp = display_role.lower()
         if "assistant" in lower_disp:
             style_name = "assistant"
@@ -199,14 +173,15 @@ class ChatHandler:
             if u_content.strip().lower() == "exit":
                 break
 
-            # This message is from the client (questioner)
             self.display_message(u_role, u_content)
             self.add_message(u_role, u_content)
 
             answer = await self._get_response(u_content)
-            # This response is from the server (responder)
             self.add_message("responder", answer)
-            self.display_message("responder", answer)
+
+            # If not streaming, we print the final answer now:
+            if not (self.stream and hasattr(self.responder_handler, "get_response_stream")):
+                self.display_message("responder", answer)
 
             response_msg = {"role": "Responder", "message": answer}
             await self.output_adapter.write_message(response_msg)
@@ -224,7 +199,6 @@ class ChatHandler:
             if u_content.strip().lower() == "exit":
                 break
 
-            # This message is from the client user (questioner)
             self.display_message(u_role, u_content)
             self.add_message(u_role, u_content)
             await self.output_adapter.write_message(user_msg)
@@ -238,34 +212,45 @@ class ChatHandler:
 
             s_role = server_msg.get("role", "unknown")
             s_content = server_msg.get("message", "")
-            # This message is from the server (responder)
             self.display_message(s_role, s_content)
             self.add_message(s_role, s_content)
             await self.print_prompt(server_mode=False)
 
     async def _get_response(self, question: str) -> str:
         if self.stream and hasattr(self.responder_handler, "get_response_stream"):
+            # Streaming mode
             answer = ""
-            # On server side, "responder" is the local assistant
-            display_role = self.local_name
-            # Just pick a style:
             style_name = "assistant"
+            display_role = self.local_name
 
+            # Create initial text and panel
             text_content = Text("", style=style_name)
             panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
 
-            with Live(panel, console=console, refresh_per_second=4, transient=True) as live:
+            # Use Live to continuously update the panel as tokens arrive
+            # Set a relatively high refresh rate and no transient so it stays visible
+            with Live(panel, console=console, refresh_per_second=10) as live:
                 for token in self.responder_handler.get_response_stream(question, self.conversation):
                     answer += token
+                    # Update the text content with the appended token
                     text_content = Text(answer, style=style_name)
                     updated_panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
+                    # Update the live display
                     live.update(updated_panel)
+                    live.refresh()  # Force immediate refresh to show the new token
+
+            # After streaming completes, 'answer' holds the full response,
+            # and the final panel is already displayed with the full answer.
             return answer
         else:
+            # Non-streaming mode
             if asyncio.iscoroutinefunction(self.responder_handler.get_response):
                 return await self.responder_handler.get_response(question, self.conversation)
             else:
                 return self.responder_handler.get_response(question, self.conversation)
+
+
+
 
     async def _cleanup(self):
         if hasattr(self.input_adapter, "stop"):
@@ -275,5 +260,4 @@ class ChatHandler:
 
     async def print_prompt(self, server_mode=False):
         await asyncio.sleep(0.05)
-        # Keep prompt simple
         console.print("\n>:", end=" ", style="system")

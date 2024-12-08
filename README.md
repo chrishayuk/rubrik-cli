@@ -42,6 +42,17 @@ python main.py \
     --stream
 ```
 
+```bash
+python main.py \
+    --mode persona \
+    --input websocket \
+    --output stdout \
+    --server \
+    --server-ws-uri ws://127.0.0.1:8045 \
+    --persona sassy_persona
+    --stream
+```
+
 ### connect client
 the following connects a client to the server
 it allows us to enter human inputs, but send output to the server
