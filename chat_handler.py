@@ -4,14 +4,13 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.theme import Theme
 from rich.live import Live
+import asyncio
 
 # agent handlers
+from adapters.output.server_output_adapter import ServerOutputAdapter
 from agent_handlers.human_handler import HumanHandler
 from agent_handlers.llm_handler import LLMHandler
 from agent_handlers.persona_handler import PersonaHandler
-
-# transport
-from transport.conversation_io import ConversationIO, ConversationEndedError
 
 custom_theme = Theme({
     "questioner": "bold magenta",
@@ -29,19 +28,22 @@ role_styles = {
 
 class ChatHandler:
     def __init__(self, 
-                 conversation_io: ConversationIO,
+                 input_adapter,
+                 output_adapter,
                  mode: str = "human", 
                  provider: str = "ollama", 
                  model: str = "llama3.3", 
                  persona: str = None,
                  stream: bool = False):
-        self.conversation_io = conversation_io
+        self.input_adapter = input_adapter
+        self.output_adapter = output_adapter
         self.mode = mode
         self.provider = provider
         self.model = model
         self.stream = stream
         self.conversation = []
 
+        # Choose responder handler
         if self.mode == "human":
             self.responder_handler = HumanHandler()
         elif self.mode == "llm":
@@ -66,71 +68,96 @@ class ChatHandler:
         console.print(panel)
 
     def add_message(self, role: str, content: str):
-        # add message to the conversation
+        # Add message to the conversation
         self.conversation.append({"role": role.lower(), "content": content})
 
     async def run(self):
         console.print("[bold yellow]Starting our conversation...[/bold yellow]\n")
-        await self.conversation_io.start_conversation()
 
-        # Receive the initial question
-        initial_prompt = await self.conversation_io.listen()
-        role = initial_prompt.get("role", "Unknown")
-        question = initial_prompt.get("message", "")
+        # Start input/output if needed
+        if hasattr(self.input_adapter, "start"):
+            await self.input_adapter.start()
+        if hasattr(self.output_adapter, "start"):
+            await self.output_adapter.start()
 
-        # Display the question
-        self.display_message(role, question)
-        self.add_message(role, question)
+        # Always handle user input
+        user_input_task = asyncio.create_task(self.handle_user_input())
+        tasks = [user_input_task]
 
-        # check if streaming is enabled
+        # Only handle server messages if output_adapter supports read_message
+        if hasattr(self.output_adapter, "read_message"):
+            server_response_task = asyncio.create_task(self.handle_server_messages())
+            tasks.append(server_response_task)
+
+        await asyncio.gather(*tasks)
+
+        await self._cleanup()
+        console.print("[bold yellow]The conversation has concluded. Thank you.[/bold yellow]\n")
+
+
+
+    async def handle_user_input(self):
+        while True:
+            try:
+                user_msg = await self.input_adapter.read_message()
+            except EOFError:
+                break
+
+            # user_msg is something like {"role": "Questioner", "message": "hi"}
+            u_role = user_msg.get("role", "Unknown")
+            u_content = user_msg.get("message", "")
+            self.display_message(u_role, u_content)
+            self.add_message(u_role, u_content)
+
+            # Send user message to server
+            await self.output_adapter.write_message(user_msg)
+
+            # After sending user message, we can also optionally get a response locally from responder handler:
+            answer = await self._get_response(u_content)
+            self.add_message("Responder", answer)
+            self.display_message("Responder", answer)
+
+            # Send the responder's message out to the server (or other clients)
+            response_msg = {"role": "Responder", "message": answer}
+            await self.output_adapter.write_message(response_msg)
+
+    async def handle_server_messages(self):
+        # Continuously read server messages from the output_adapter (WebSocketDuplexAdapter)
+        # and display them. This handles any messages from the server that are not the local user's
+        # or the local responder's. If server echoes messages, they'll appear here.
+
+        while True:
+            try:
+                server_msg = await self.output_adapter.read_message()  # from server
+            except EOFError:
+                break
+
+            s_role = server_msg.get("role", "unknown")
+            s_content = server_msg.get("message", "")
+            self.display_message(s_role, s_content)
+            self.add_message(s_role, s_content)
+
+    async def _get_response(self, question: str) -> str:
         if self.stream and hasattr(self.responder_handler, "get_response_stream"):
-            # Use a Live context to dynamically update the panel
             answer = ""
             style_name = role_styles.get("Responder", "unknown")
 
-            # Create an empty panel to start
             text_content = Text("", style=style_name)
             panel = Panel(text_content, title="Responder", subtitle="", border_style=style_name, expand=True)
 
-            # Use Live for dynamic updates
             with Live(panel, console=console, refresh_per_second=4, transient=True) as live:
                 for token in self.responder_handler.get_response_stream(question, self.conversation):
                     answer += token
-                    # Update the panel content with the accumulated answer
                     text_content = Text(answer, style=style_name)
                     updated_panel = Panel(text_content, title="Responder", subtitle="", border_style=style_name, expand=True)
                     live.update(updated_panel)
-
-            # After streaming is done, print a final panel outside of Live
-            self.add_message("Responder", answer)
-            self.display_message("Responder", answer)
+            return answer
         else:
-            # Non-streaming response
-            answer = self.responder_handler.get_response(question, self.conversation)
-            self.add_message("Responder", answer)
-            self.display_message("Responder", answer)
+            return self.responder_handler.get_response(question, self.conversation)
 
-        # Send the answer back to the server
-        response_msg = {
-            "role": "Responder",
-            "message": answer
-        }
-        await self.conversation_io.respond(response_msg)
-
-        # Listen for follow-up
-        try:
-            follow_up = await self.conversation_io.listen()
-        except ConversationEndedError:
-            console.print("[bold red]The conversation ended unexpectedly. No further messages received.[/bold red]")
-            await self.conversation_io.end_conversation()
-            console.print("[bold yellow]The conversation has concluded. Thank you.[/bold yellow]\n")
-            return
-
-        v_role = follow_up.get("role", "Unknown")
-        v_msg = follow_up.get("message", "")
-        self.display_message(v_role, v_msg)
-        self.add_message(v_role, v_msg)
-
-        # End conversation
-        await self.conversation_io.end_conversation()
-        console.print("[bold yellow]The conversation has concluded. Thank you.[/bold yellow]\n")
+    async def _cleanup(self):
+        # Stop input and output adapters if they have stop methods
+        if hasattr(self.input_adapter, "stop"):
+            await self.input_adapter.stop()
+        if hasattr(self.output_adapter, "stop"):
+            await self.output_adapter.stop()
