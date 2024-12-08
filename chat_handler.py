@@ -147,6 +147,7 @@ class ChatHandler:
         if self.server:
             await self.handle_server_input()
         else:
+            # handle_user_input does NOT print prompt now
             user_input_task = asyncio.create_task(self.handle_user_input())
             tasks = [user_input_task]
 
@@ -161,8 +162,6 @@ class ChatHandler:
 
     async def handle_server_input(self):
         while True:
-            await self.print_prompt(server_mode=True)
-
             try:
                 user_msg = await self.input_adapter.read_message()
             except EOFError:
@@ -179,16 +178,24 @@ class ChatHandler:
             answer = await self._get_response(u_content)
             self.add_message("responder", answer)
 
-            # If not streaming, we print the final answer now:
-            if not (self.stream and hasattr(self.responder_handler, "get_response_stream")):
+            if self.stream and hasattr(self.responder_handler, "get_response_stream"):
+                await self.output_adapter.write_message({
+                    "role": "Responder",
+                    "message": answer,
+                    "partial": False
+                })
+            else:
+                await self.output_adapter.write_message({
+                    "role": "Responder",
+                    "message": answer
+                })
+                # Display final answer locally (non-streaming)
                 self.display_message("responder", answer)
 
-            response_msg = {"role": "Responder", "message": answer}
-            await self.output_adapter.write_message(response_msg)
-
     async def handle_user_input(self):
+        # No prompt printing here. This just reads from input_adapter.
+        # The prompt will be printed by handle_server_messages() after messages.
         while True:
-            await self.print_prompt(server_mode=False)
             try:
                 user_msg = await self.input_adapter.read_message()
             except EOFError:
@@ -204,6 +211,12 @@ class ChatHandler:
             await self.output_adapter.write_message(user_msg)
 
     async def handle_server_messages(self):
+        streaming_answer = ""
+        is_streaming = False
+        live_instance = None
+        display_role = None
+        style_name = None
+
         while True:
             try:
                 server_msg = await self.output_adapter.read_message()
@@ -212,13 +225,48 @@ class ChatHandler:
 
             s_role = server_msg.get("role", "unknown")
             s_content = server_msg.get("message", "")
-            self.display_message(s_role, s_content)
-            self.add_message(s_role, s_content)
-            await self.print_prompt(server_mode=False)
+            partial = server_msg.get("partial", False)
+
+            if partial:
+                if not is_streaming:
+                    is_streaming = True
+                    streaming_answer = s_content
+                    display_role, style_name = self.role_to_display_name(s_role)
+
+                    # No transient, final panel stays after exit
+                    text_content = Text(streaming_answer, style=style_name)
+                    panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
+                    live_instance = Live(panel, console=console, refresh_per_second=10)
+                    live_instance.__enter__()
+                else:
+                    streaming_answer += s_content
+                    text_content = Text(streaming_answer, style=style_name)
+                    updated_panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
+                    live_instance.update(updated_panel)
+                    live_instance.refresh()
+            else:
+                # partial=False means streaming ended or a normal message
+                if is_streaming:
+                    # End streaming, final panel remains
+                    live_instance.__exit__(None, None, None)
+                    live_instance = None
+                    is_streaming = False
+                    streaming_answer = ""
+                    display_role = None
+                    style_name = None
+
+                    # After streaming ends, print newline and prompt here
+                    console.print()
+                    await self.print_prompt(server_mode=False)
+                else:
+                    # Non-streaming message
+                    self.display_message(s_role, s_content)
+                    console.print()
+                    await self.print_prompt(server_mode=False)
 
     async def _get_response(self, question: str) -> str:
         if self.stream and hasattr(self.responder_handler, "get_response_stream"):
-            # Streaming mode
+            # Streaming mode: send only partial tokens here.
             answer = ""
             style_name = "assistant"
             display_role = self.local_name
@@ -226,30 +274,20 @@ class ChatHandler:
             text_content = Text("", style=style_name)
             panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
 
-            # Begin streaming tokens to both the panel and the client
             with Live(panel, console=console, refresh_per_second=10) as live:
                 for token in self.responder_handler.get_response_stream(question, self.conversation):
                     answer += token
-                    # Update server-side panel
                     text_content = Text(answer, style=style_name)
                     updated_panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
                     live.update(updated_panel)
                     live.refresh()
 
-                    # Send token to client as partial message
-                    # The client will receive many of these partial messages
+                    # Send token as partial
                     await self.output_adapter.write_message({
                         "role": "Responder",
                         "message": token,
                         "partial": True
                     })
-
-            # After streaming completes, send one final message with the full answer
-            await self.output_adapter.write_message({
-                "role": "Responder",
-                "message": answer,
-                "partial": False
-            })
 
             return answer
         else:
@@ -259,17 +297,7 @@ class ChatHandler:
             else:
                 answer = self.responder_handler.get_response(question, self.conversation)
 
-            # Send full answer at once if not streaming
-            await self.output_adapter.write_message({
-                "role": "Responder",
-                "message": answer
-            })
-
             return answer
-
-
-
-
 
     async def _cleanup(self):
         if hasattr(self.input_adapter, "stop"):
@@ -278,5 +306,6 @@ class ChatHandler:
             await self.output_adapter.stop()
 
     async def print_prompt(self, server_mode=False):
+        # Print prompt only, no newline
         await asyncio.sleep(0.05)
-        console.print("\n>:", end=" ", style="system")
+        console.print(">:", end=" ", style="system")
