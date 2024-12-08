@@ -21,7 +21,7 @@ class LLMHandler:
 
         # Convert internal conversation format to LLM messages
         for msg in conversation:
-            role = "system"
+            role = "user"
             if msg["role"] == "questioner":
                 role = "user"
             elif msg["role"] == "responder":
@@ -51,5 +51,6 @@ class LLMHandler:
             # get the response chunk
             text = token.message.content if hasattr(token, 'message') and token.message and token.message.content else ""
 
-            # yield it back
-            yield text
+            # only yield non empty chunks
+            if text:
+                yield text

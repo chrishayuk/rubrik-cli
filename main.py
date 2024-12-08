@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import logging
 
 # handlers
 from chat_handler import ChatHandler
@@ -28,12 +29,22 @@ from adapters.websocket_duplex_adapter import WebSocketDuplexAdapter
 # server
 from ws_server import start_server, connected_clients
 
+
+# set the logger
+logger = logging.getLogger(__name__)
+
+# Set up logging
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.CRITICAL  # Set the log level to DEBUG for detailed logs.
+)
+
 async def run_chat(args, message_queue):
     # Validate persona if needed
     if args.mode == "persona" and not args.persona:
         raise ValueError("--persona is required when --mode persona")
 
-    # Choose responder handler based on mode
+    # Choose responder handler
     if args.mode == "human":
         responder = HumanHandler()
     elif args.mode == "llm":
@@ -47,8 +58,13 @@ async def run_chat(args, message_queue):
     if args.server:
         # In server mode, read messages from message_queue (from external clients)
         input_adapter = ServerInputAdapter(message_queue)
-        # Use ServerOutputAdapter to send responses back to clients
-        output_adapter = ServerOutputAdapter(connected_clients)
+        
+        # If output=websocket and output-ws-uri provided, use WebSocketOutput
+        # otherwise use ServerOutputAdapter
+        if args.output == "websocket" and args.output_ws_uri:
+            output_adapter = WebSocketOutput(uri=args.output_ws_uri)
+        else:
+            output_adapter = ServerOutputAdapter(connected_clients)
     else:
         # Non-server (client) mode
         # Choose input adapter
@@ -78,7 +94,7 @@ async def run_chat(args, message_queue):
         model=args.model,
         persona=args.persona,
         stream=args.stream,
-        server=args.server  # <--- IMPORTANT: Pass server flag here
+        server=args.server
     )
 
     await handler.run()
