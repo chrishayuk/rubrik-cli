@@ -223,31 +223,50 @@ class ChatHandler:
             style_name = "assistant"
             display_role = self.local_name
 
-            # Create initial text and panel
             text_content = Text("", style=style_name)
             panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
 
-            # Use Live to continuously update the panel as tokens arrive
-            # Set a relatively high refresh rate and no transient so it stays visible
+            # Begin streaming tokens to both the panel and the client
             with Live(panel, console=console, refresh_per_second=10) as live:
                 for token in self.responder_handler.get_response_stream(question, self.conversation):
                     answer += token
-                    # Update the text content with the appended token
+                    # Update server-side panel
                     text_content = Text(answer, style=style_name)
                     updated_panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
-                    # Update the live display
                     live.update(updated_panel)
-                    live.refresh()  # Force immediate refresh to show the new token
+                    live.refresh()
 
-            # After streaming completes, 'answer' holds the full response,
-            # and the final panel is already displayed with the full answer.
+                    # Send token to client as partial message
+                    # The client will receive many of these partial messages
+                    await self.output_adapter.write_message({
+                        "role": "Responder",
+                        "message": token,
+                        "partial": True
+                    })
+
+            # After streaming completes, send one final message with the full answer
+            await self.output_adapter.write_message({
+                "role": "Responder",
+                "message": answer,
+                "partial": False
+            })
+
             return answer
         else:
             # Non-streaming mode
             if asyncio.iscoroutinefunction(self.responder_handler.get_response):
-                return await self.responder_handler.get_response(question, self.conversation)
+                answer = await self.responder_handler.get_response(question, self.conversation)
             else:
-                return self.responder_handler.get_response(question, self.conversation)
+                answer = self.responder_handler.get_response(question, self.conversation)
+
+            # Send full answer at once if not streaming
+            await self.output_adapter.write_message({
+                "role": "Responder",
+                "message": answer
+            })
+
+            return answer
+
 
 
 
