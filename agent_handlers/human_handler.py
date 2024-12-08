@@ -1,12 +1,11 @@
+import asyncio
 from rich.console import Console
 
-# setup the console
 console = Console()
 
 class HumanHandler:
-    def get_response(self, question: str, conversation: list) -> str:
-        """
-        Prompt the human user for an answer.
-        `question` and `conversation` are provided for context if needed.
-        """
-        return console.input("[bold cyan]Your answer:[/bold cyan] ")
+    async def get_response(self, question: str, conversation: list) -> str:
+        loop = asyncio.get_running_loop()
+        answer = await loop.run_in_executor(None, console.input, "[bold cyan]Your answer:[/bold cyan] ")
+        return answer
+

@@ -23,7 +23,7 @@ class WebSocketDuplexAdapter:
     async def get_user_input_and_send(self):
         # Continuously prompt user for input and send it
         while True:
-            user_input = input("User: ")
+            user_input = input("")
             if user_input.strip().lower() == "quit":
                 break
             await self.write_message({"role": "Questioner", "message": user_input})

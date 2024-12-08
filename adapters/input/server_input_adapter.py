@@ -1,8 +1,8 @@
 import asyncio
+import json
 
 class ServerInputAdapter:
     def __init__(self, message_queue: asyncio.Queue):
-        # set up the message queue
         self.message_queue = message_queue
 
     async def start(self):
@@ -10,11 +10,14 @@ class ServerInputAdapter:
         pass
 
     async def read_message(self):
-        # get a message from the queue
+        # Get a message from the queue (expected to be a JSON string)
         msg = await self.message_queue.get()
 
-        # return the message
-        return {"role": "questioner", "message": msg}
+        # Parse the JSON string into a dictionary
+        data = json.loads(msg)
+
+        # data should now look like {"role": "Questioner", "message": "hi"}
+        return data
     
     async def stop(self):
         # do nothing

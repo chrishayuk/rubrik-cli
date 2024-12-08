@@ -30,7 +30,7 @@ async def run_chat(args, message_queue):
     if args.mode == "persona" and not args.persona:
         raise ValueError("--persona is required when --mode persona")
 
-    # Choose responder handler
+    # Choose responder handler based on mode
     if args.mode == "human":
         responder = HumanHandler()
     elif args.mode == "llm":
@@ -38,14 +38,14 @@ async def run_chat(args, message_queue):
     else:
         responder = PersonaHandler(persona_name=args.persona, provider=args.provider, model=args.model)
 
+    # Choose input/output adapters based on server or client mode
     if args.server:
         # In server mode, read messages from message_queue (from external clients)
         input_adapter = ServerInputAdapter(message_queue)
-        
-        # Now use ServerOutputAdapter to send responses back to clients
+        # Use ServerOutputAdapter to send responses back to clients
         output_adapter = ServerOutputAdapter(connected_clients)
     else:
-        # Normal logic when not a server
+        # Non-server (client) mode
         # Choose input adapter
         if args.input == "human":
             input_adapter = HumanInput()
@@ -53,7 +53,7 @@ async def run_chat(args, message_queue):
             if not args.cmd:
                 raise ValueError("--cmd is required when --input=stdin")
             input_adapter = StdInInput(cmd=args.cmd)
-        else:  
+        else:
             # websocket input (client mode)
             input_adapter = WebSocketInput(uri=args.input_ws_uri)
 
@@ -72,7 +72,8 @@ async def run_chat(args, message_queue):
         provider=args.provider,
         model=args.model,
         persona=args.persona,
-        stream=args.stream
+        stream=args.stream,
+        server=args.server  # <--- IMPORTANT: Pass server flag here
     )
 
     await handler.run()
