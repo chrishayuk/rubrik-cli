@@ -144,10 +144,15 @@ class ChatHandler:
         if hasattr(self.output_adapter, "start"):
             await self.output_adapter.start()
 
+        # If in human mode and not a server, print the initial prompt immediately
+        if self.mode == "human" and not self.server:
+            console.print()
+            await self.print_prompt(server_mode=False)
+
         if self.server:
             await self.handle_server_input()
         else:
-            # handle_user_input does NOT print prompt now
+            # handle_user_input does not print the prompt now; we already printed it above for startup
             user_input_task = asyncio.create_task(self.handle_user_input())
             tasks = [user_input_task]
 
@@ -159,6 +164,7 @@ class ChatHandler:
 
         await self._cleanup()
         self.print_panel("Chat", "The conversation has concluded. Thank you.", "system")
+
 
     async def handle_server_input(self):
         while True:
