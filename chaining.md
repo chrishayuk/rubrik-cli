@@ -1,55 +1,48 @@
-
-python main.py \
-    --mode human \
-    --input human \
-    --output websocket \
-    --output-ws-uri ws://127.0.0.1:9000 --stream
-
-
-
-
-
-
-
-### server d
+### receiving human
 python main.py \
     --server \
-    --mode llm \
+    --mode forwarder \
+    --server-ws-uri ws://127.0.0.1:9004 \
+    --output human
+
+### german to english translator
+python main.py \
+    --server \
+    --mode persona \
+    --persona german_english_translator \
     --server-ws-uri ws://127.0.0.1:9003 \
     --output websocket \
-    --output-ws-uri ws://127.0.0.1:9004 --stream
+    --output-ws-uri ws://127.0.0.1:9004
 
-### server c
-python main.py \
+# german helpful native
+chrishayuk$ python main.py \
     --server \
-    --mode llm \
+    --mode persona \
+    --persona german_helpful_native \
     --server-ws-uri ws://127.0.0.1:9002 \
     --output websocket \
-    --output-ws-uri ws://127.0.0.1:9003 --stream
+    --output-ws-uri ws://127.0.0.1:9003
 
-# server b
+# english to german translator
 python main.py \
     --server \
     --mode persona \
     --persona english_german_translator \
     --server-ws-uri ws://127.0.0.1:9001 \
     --output websocket \
-    --output-ws-uri ws://127.0.0.1:9002 --stream
+    --output-ws-uri ws://127.0.0.1:9002
 
-# server a
+# forwarder
 python main.py \
     --server \
     --mode forwarder \
     --server-ws-uri ws://127.0.0.1:9000 \
     --output websocket \
-    --output-ws-uri ws://127.0.0.1:9001 --stream
+    --output-ws-uri ws://127.0.0.1:9001
 
-# final displayer
-```bash
+# input client
 python main.py \
-    --server \
-    --mode forwarder \
-    --server-ws-uri ws://127.0.0.1:9004 \
-    --output human \
-    --stream
-```
+    --mode human \
+    --input human \
+    --output websocket \
+    --output-ws-uri ws://127.0.0.1:9000
