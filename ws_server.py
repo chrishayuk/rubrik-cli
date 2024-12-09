@@ -8,89 +8,76 @@ from websockets.exceptions import ConnectionClosedError
 from pydantic import ValidationError
 from messages.message import MessageModel
 
-# setup logg
 logger = logging.getLogger(__name__)
 
-# connections
 connected_clients = set()
 
 async def server_handler(websocket, path, message_queue: asyncio.Queue):
-    # add the client
+    """
+    Handles individual WebSocket client connections.
+    Receives messages, validates and wraps them into a standardized format (MessageModel),
+    then puts them into the message_queue for further processing by downstream handlers.
+    """
     connected_clients.add(websocket)
     logger.info(f"New client connected. Total clients: {len(connected_clients)}")
 
     try:
-        # get the message
+        # Continuously read messages from this client until they disconnect or send 'exit'
         async for raw_message in websocket:
-            # log it
             logger.debug(f"Received raw message from client: {raw_message}")
 
-            # Try JSON parsing
+            # Attempt to parse as JSON
             try:
-                # load as json
                 data = json.loads(raw_message)
-
-                # structured
                 was_structured = True
             except json.JSONDecodeError:
-                # failed to parse as json, assume it's a string
+                # Not valid JSON, treat as plain text
                 was_structured = False
-
-                # wrap it in a dictionary
                 data = {
                     "role": "Questioner",
                     "message": raw_message,
                     "partial": False
                 }
 
-            # check if it's valid
             if was_structured:
                 # Validate structured message
                 try:
-                    # Validate the data against your model
                     message_obj = MessageModel(**data)
                 except ValidationError as ve:
-                    # Log the error
                     logger.error(f"Message validation failed (structured): {ve.errors()}")
-
-                    # data is a dictionary, safe to use get()
                     error_response = {
                         "role": "Server",
                         "message": "Invalid message format or content. Check fields.",
                         "partial": False,
                         "request_id": data.get("request_id", str(uuid.uuid4()))
                     }
-
-                    # Respond with the error response
+                    # Send structured error response back to the client
                     await websocket.send(json.dumps(error_response))
-
-                    # Skip to the next iteration of the loop
                     continue
 
-                # Validation passed
+                # Validation passed, forward downstream
                 structured_message = message_obj.model_dump_json()
-
-                # put in the queue
                 await message_queue.put(structured_message)
 
             else:
-                # Validate unstructured (plain text wrapped into a dict)
+                # Validate unstructured message
                 try:
                     message_obj = MessageModel(**data)
                 except ValidationError as ve:
                     logger.error(f"Message validation failed (unstructured): {ve.errors()}")
-                    # Respond in plain text since the client sent plain text
+                    # Respond in plain text since message was not structured
                     await websocket.send("Invalid message. Please send a non-empty message.")
                     continue
 
-                # Validation passed
+                # Validation passed, forward downstream
                 structured_message = message_obj.model_dump_json()
                 await message_queue.put(structured_message)
 
-                # Optionally respond in plain text if needed:
+                # If needed, respond in plain text:
                 # await websocket.send("Received your message.")
 
     except ConnectionClosedError as e:
+        # The client disconnected unexpectedly.
         logger.info(f"Client connection closed unexpectedly: {e}")
     except Exception as e:
         logger.error(f"An error occurred while handling client: {e}")
@@ -98,14 +85,17 @@ async def server_handler(websocket, path, message_queue: asyncio.Queue):
         connected_clients.discard(websocket)
         logger.info(f"Client disconnected. Total clients: {len(connected_clients)}")
 
-
 async def start_server(server_ws_uri: str, message_queue: asyncio.Queue):
+    """
+    Starts the WebSocket server and runs indefinitely.
+    """
     parsed = urlparse(server_ws_uri)
     host = parsed.hostname
     port = parsed.port
 
     logger.info(f"Starting WebSocket server at {server_ws_uri}")
 
+    # Disable ping and timeout intervals to reduce unintended disconnections
     async with websockets.serve(
         lambda ws, path: server_handler(ws, path, message_queue),
         host,
@@ -115,4 +105,5 @@ async def start_server(server_ws_uri: str, message_queue: asyncio.Queue):
         close_timeout=None
     ):
         logger.info(f"WebSocket server running at {server_ws_uri}")
+        # Keep the server running indefinitely, even if clients connect/disconnect
         await asyncio.Future()

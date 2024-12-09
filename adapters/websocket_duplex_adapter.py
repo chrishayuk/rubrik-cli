@@ -18,30 +18,43 @@ class WebSocketDuplexAdapter:
         await self._connect_with_retries()
 
     async def read_message(self) -> dict:
-        for attempt in range(self.max_retries):
+        while True:
             try:
                 msg = await self.websocket.recv()
-                return json.loads(msg)
+                try:
+                    data = json.loads(msg)
+                    return data
+                except json.JSONDecodeError as e:
+                    log.debug(f"Invalid JSON message received: {e}")
+                    # Instead of ending the conversation, just continue reading next messages
+                    continue
             except ConnectionClosedError as e:
                 log.debug(f"Connection lost during read_message: {e}")
                 await self._reconnect()
-            except json.JSONDecodeError as e:
-                log.debug(f"Invalid JSON message received: {e}")
-                raise EOFError("Received invalid JSON message from WebSocket.")
-        raise EOFError("Failed to read message after multiple retries.")
+            except Exception as e:
+                log.debug(f"Unexpected error during read_message: {e}")
+                # Attempt to reconnect and continue
+                await self._reconnect()
 
     async def write_message(self, data: dict):
-        for attempt in range(self.max_retries):
+        while True:
             try:
-                await self.websocket.send(json.dumps(data))
+                # Validate that data can be serialized to JSON
+                msg = json.dumps(data)
+                await self.websocket.send(msg)
                 return
             except ConnectionClosedError as e:
                 log.debug(f"Connection lost during write_message: {e}")
                 await self._reconnect()
             except TypeError as e:
                 log.debug(f"Data serialization error: {e}")
-                raise EOFError("Unable to send invalid data over WebSocket.")
-        raise EOFError("Failed to write message after multiple retries.")
+                # If data can't be serialized, log and skip sending this message
+                # This avoids killing the conversation. The malformed message is just not sent.
+                return
+            except Exception as e:
+                log.debug(f"Unexpected error during write_message: {e}")
+                # Attempt to reconnect and try again
+                await self._reconnect()
 
     async def stop(self):
         if self.websocket:
@@ -56,14 +69,17 @@ class WebSocketDuplexAdapter:
             await self.write_message({"role": "Questioner", "message": user_input})
 
     async def _connect_with_retries(self):
-        for attempt in range(self.max_retries):
+        attempt = 0
+        while True:
+            attempt += 1
             try:
                 self.websocket = await websockets.connect(self.uri)
+                log.debug(f"Connected to {self.uri} on attempt {attempt}")
                 return
             except Exception as e:
-                log.debug(f"Failed to connect (attempt {attempt+1}/{self.max_retries}): {e}")
+                log.debug(f"Failed to connect (attempt {attempt}): {e}")
                 await asyncio.sleep(self.retry_delay)
-        raise EOFError("Unable to establish WebSocket connection after multiple attempts.")
+                # Keep retrying indefinitely or add logic to give up after many attempts
 
     async def _reconnect(self):
         if self.websocket:

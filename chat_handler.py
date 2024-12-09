@@ -99,6 +99,8 @@ class ChatHandler:
                     server_response_task = asyncio.create_task(self.handle_server_messages())
                     tasks.append(server_response_task)
 
+                # Wait for all tasks to finish
+                # They will finish if user sends "exit" or we decide to stop after certain conditions
                 await asyncio.gather(*tasks)
         except (ConnectionClosedError, EOFError) as e:
             log.debug(f"Connection ended abruptly: {e}")
@@ -115,8 +117,10 @@ class ChatHandler:
             try:
                 user_msg = await self.input_adapter.read_message()
             except (EOFError, ConnectionClosedError) as e:
-                log.debug(f"Server input ended: {e}")
-                break
+                log.debug(f"Server input read error: {e}. Attempting to continue.")
+                # Instead of breaking, we just continue waiting
+                await asyncio.sleep(0.5)  # Optional small delay
+                continue
 
             u_role = user_msg.get("role", "Unknown")
             chunk = user_msg.get("message", "")
@@ -163,7 +167,8 @@ class ChatHandler:
                         display_message(self.server, self.local_name, self.remote_name, "responder", answer)
                 except (ConnectionClosedError, EOFError) as e:
                     log.debug(f"Failed to send responder message: {e}")
-                    break
+                    # Don't break, just continue to next message
+                    continue
 
     async def handle_user_input(self):
         # For client mode, handle user input similarly
@@ -171,8 +176,9 @@ class ChatHandler:
             try:
                 user_msg = await self.input_adapter.read_message()
             except (EOFError, ConnectionClosedError) as e:
-                log.debug(f"User input ended: {e}")
-                break
+                log.debug(f"User input read error: {e}, will try again.")
+                await asyncio.sleep(0.5)  # short delay before retrying
+                continue
 
             u_role = user_msg.get("role", "Unknown")
             u_content = user_msg.get("message", "")
@@ -185,7 +191,9 @@ class ChatHandler:
                 await self.output_adapter.write_message(user_msg)
             except (ConnectionClosedError, EOFError) as e:
                 log.debug(f"Failed to relay user message: {e}")
-                break
+                # Don't break, just try again
+                await asyncio.sleep(0.5)
+                continue
 
     async def handle_server_messages(self):
         streaming_answer = ""
@@ -203,11 +211,13 @@ class ChatHandler:
             try:
                 server_msg = await self.output_adapter.read_message()
             except EOFError:
-                # No more messages
-                break
+                log.debug("No more server messages for now, will keep waiting.")
+                await asyncio.sleep(0.5)  # wait and continue
+                continue
             except ConnectionClosedError as e:
-                log.debug(f"Connection closed while reading server messages: {e}")
-                break
+                log.debug(f"Connection closed while reading server messages: {e}, waiting and continuing.")
+                await asyncio.sleep(0.5)
+                continue
 
             s_role = server_msg.get("role", "unknown")
             s_content = server_msg.get("message", "")
