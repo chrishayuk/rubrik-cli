@@ -1,4 +1,4 @@
-# adapters/websocket_duplex_adapter.py
+# adapters/duplex/websocket_duplex_adapter.py
 import json
 import asyncio
 import logging
@@ -70,16 +70,18 @@ class WebSocketDuplexAdapter:
 
     async def _connect_with_retries(self):
         attempt = 0
-        while True:
+        while attempt < self.max_retries:
             attempt += 1
             try:
                 self.websocket = await websockets.connect(self.uri)
                 log.debug(f"Connected to {self.uri} on attempt {attempt}")
                 return
             except Exception as e:
-                log.debug(f"Failed to connect (attempt {attempt}): {e}")
+                log.debug(f"Failed to connect (attempt {attempt}/{self.max_retries}): {e}")
                 await asyncio.sleep(self.retry_delay)
-                # Keep retrying indefinitely or add logic to give up after many attempts
+        
+        raise EOFError(f"Unable to establish WebSocket connection after {self.max_retries} attempts.")
+
 
     async def _reconnect(self):
         if self.websocket:

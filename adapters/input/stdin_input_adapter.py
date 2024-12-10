@@ -1,3 +1,4 @@
+# adapters/input/stdin_input_adapter.py
 import asyncio
 import json
 from adapters.input.input_adapter import InputAdapter

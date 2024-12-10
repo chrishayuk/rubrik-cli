@@ -1,3 +1,4 @@
+# adapters/input/input_adapter.py
 class InputAdapter:
     async def start(self):
         pass

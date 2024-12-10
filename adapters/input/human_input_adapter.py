@@ -1,3 +1,4 @@
+# adapters/input/human_input_adapter.py
 import asyncio
 from adapters.input.input_adapter import InputAdapter
 

@@ -18,7 +18,7 @@ from adapters.output.stdout_output_adapter import StdOutOutput
 from adapters.output.websocket_output_adapter import WebSocketOutput
 
 # duplex adapter
-from adapters.websocket_duplex_adapter import WebSocketDuplexAdapter
+from adapters.duplex.websocket_duplex_adapter import WebSocketDuplexAdapter
 
 # server
 from ws_server import start_server, connected_clients

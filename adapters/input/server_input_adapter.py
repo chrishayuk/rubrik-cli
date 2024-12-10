@@ -1,3 +1,4 @@
+# adapters/input/server_input_adapter.py
 import asyncio
 import json
 
