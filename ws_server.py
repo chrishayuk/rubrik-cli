@@ -12,11 +12,20 @@ logger = logging.getLogger(__name__)
 
 connected_clients = set()
 
-async def server_handler(websocket, path, message_queue: asyncio.Queue):
+async def server_handler(websocket: websockets.WebSocketServerProtocol, path: str, message_queue: asyncio.Queue) -> None:
     """
     Handles individual WebSocket client connections.
     Receives messages, validates and wraps them into a standardized format (MessageModel),
     then puts them into the message_queue for further processing by downstream handlers.
+
+    Parameters
+    ----------
+    websocket : websockets.WebSocketServerProtocol
+        The client's websocket connection.
+    path : str
+        The requested path for the websocket (unused in this example).
+    message_queue : asyncio.Queue
+        A queue where validated messages will be placed for downstream processing.
     """
     connected_clients.add(websocket)
     logger.info(f"New client connected. Total clients: {len(connected_clients)}")
@@ -38,44 +47,40 @@ async def server_handler(websocket, path, message_queue: asyncio.Queue):
                     "partial": False
                 }
 
-            if was_structured:
-                # Validate structured message
-                try:
-                    message_obj = MessageModel(**data)
-                except ValidationError as ve:
-                    logger.error(f"Message validation failed (structured): {ve.errors()}")
+            # Validate message using MessageModel
+            try:
+                message_obj = MessageModel(**data)
+            except ValidationError as ve:
+                # Validation failed
+                request_id = data.get("request_id", str(uuid.uuid4()))
+                logger.error(f"Message validation failed: {ve.errors()}")
+
+                if was_structured:
+                    # For structured messages, return a structured error response
                     error_response = {
                         "role": "Server",
-                        "message": "Invalid message format or content. Check fields.",
+                        "message": "Validation error: One or more fields are invalid.",
                         "partial": False,
-                        "request_id": data.get("request_id", str(uuid.uuid4()))
+                        "request_id": request_id,
+                        "errors": ve.errors()
                     }
-                    # Send structured error response back to the client
                     await websocket.send(json.dumps(error_response))
-                    continue
-
-                # Validation passed
-                structured_message = message_obj.model_dump_json()
-
-            else:
-                # Validate unstructured message
-                try:
-                    message_obj = MessageModel(**data)
-                except ValidationError as ve:
-                    logger.error(f"Message validation failed (unstructured): {ve.errors()}")
-                    # Respond in plain text since message was not structured
+                else:
+                    # For unstructured, just send a text error response
                     await websocket.send("Invalid message. Please send a non-empty message.")
-                    continue
+                continue
 
-                # Validation passed
-                structured_message = message_obj.model_dump_json()
+            # Validation passed
+            structured_message = message_obj.model_dump_json()
 
             # Add was_structured info to the message before putting it on the queue
-            # Since structured_message is JSON, convert to dict, add was_structured, and re-serialize
             message_dict = json.loads(structured_message)
             message_dict["was_structured"] = was_structured
 
-            # Put the updated message dict as JSON back into the queue
+            logger.debug(f"Validated message (was_structured={was_structured}, "
+                         f"request_id={message_dict['request_id']}): {message_dict}")
+
+            # Put the updated message dict as JSON back into the queue for downstream processing
             await message_queue.put(json.dumps(message_dict))
 
     except ConnectionClosedError as e:
@@ -86,9 +91,17 @@ async def server_handler(websocket, path, message_queue: asyncio.Queue):
         connected_clients.discard(websocket)
         logger.info(f"Client disconnected. Total clients: {len(connected_clients)}")
 
-async def start_server(server_ws_uri: str, message_queue: asyncio.Queue):
+
+async def start_server(server_ws_uri: str, message_queue: asyncio.Queue) -> None:
     """
     Starts the WebSocket server and runs indefinitely.
+
+    Parameters
+    ----------
+    server_ws_uri : str
+        The URI at which to start the WebSocket server (e.g. "ws://localhost:9000").
+    message_queue : asyncio.Queue
+        A queue to which incoming validated messages are sent.
     """
     parsed = urlparse(server_ws_uri)
     host = parsed.hostname
@@ -98,7 +111,7 @@ async def start_server(server_ws_uri: str, message_queue: asyncio.Queue):
 
     # Disable ping and timeout intervals to reduce unintended disconnections
     async with websockets.serve(
-        lambda ws, path: server_handler(ws, path, message_queue),
+        lambda ws, p: server_handler(ws, p, message_queue),
         host,
         port,
         ping_interval=None,

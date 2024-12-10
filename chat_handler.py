@@ -110,65 +110,102 @@ class ChatHandler:
             print_panel("Chat", "The conversation has concluded. Thank you.", "system")
 
     async def handle_server_input(self):
-        user_prompt_buffer = []
-        prompt_in_progress = False
+        from rich.panel import Panel
+        from rich.text import Text
+        from rich.live import Live
+
+        # Dictionary to track ongoing partial messages
+        # Key: request_id, Value: dict with 'chunks' (list of text), 'live_instance', etc.
+        partial_messages = {}
 
         while True:
             try:
                 user_msg = await self.input_adapter.read_message()
             except (EOFError, ConnectionClosedError) as e:
                 log.debug(f"Server input read error: {e}. Attempting to continue.")
-                # Instead of breaking, we just continue waiting
-                await asyncio.sleep(0.5)  # Optional small delay
+                await asyncio.sleep(0.5)
                 continue
 
             u_role = user_msg.get("role", "Unknown")
             chunk = user_msg.get("message", "")
             partial = user_msg.get("partial", False)
+            request_id = user_msg.get("request_id", None)
+            message_number = user_msg.get("message_number", None)
 
-            if chunk.strip().lower() == "exit":
-                break
+            # If there's no request_id in the incoming message, generate one or log a warning
+            if request_id is None:
+                log.warning("Received message without request_id. Assigning a temporary ID.")
+                request_id = f"temp_{id(user_msg)}"
+
+            # Get or create the state for this request_id
+            if request_id not in partial_messages:
+                partial_messages[request_id] = {
+                    "chunks": [],
+                    "live_instance": None,
+                    "role": u_role,
+                    "finalized": False
+                }
+
+            msg_state = partial_messages[request_id]
 
             if partial:
-                # Accumulate partial chunks
-                if not prompt_in_progress:
-                    prompt_in_progress = True
-                    user_prompt_buffer.clear()
+                # We are receiving a partial chunk for this request_id
+                msg_state["chunks"].append(chunk)
 
-                user_prompt_buffer.append(chunk)
-                current_input = "".join(user_prompt_buffer)
-                display_message(self.server, self.local_name, self.remote_name, u_role, current_input)
-            else:
-                # Final chunk received
-                if prompt_in_progress:
-                    user_prompt_buffer.append(chunk)
-                    full_prompt = "".join(user_prompt_buffer)
-                    user_prompt_buffer.clear()
-                    prompt_in_progress = False
+                # If no live display started for this request yet, start now
+                if msg_state["live_instance"] is None:
+                    style_name = "user"
+                    display_role = self.remote_name
+                    text_content = Text("", style=style_name)
+                    panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
+                    live_instance = Live(panel, console=console, refresh_per_second=10)
+                    live_instance.__enter__()
+                    msg_state["live_instance"] = live_instance
                 else:
-                    full_prompt = chunk
+                    live_instance = msg_state["live_instance"]
 
+                # Update the live display
+                streaming_input = "".join(msg_state["chunks"])
+                text_content = Text(streaming_input, style="user")
+                updated_panel = Panel(text_content, title=self.remote_name, border_style="user", expand=True)
+                live_instance.update(updated_panel)
+                live_instance.refresh()
+
+            else:
+                # This is the final chunk for the request_id
+                msg_state["chunks"].append(chunk)
+                full_prompt = "".join(msg_state["chunks"])
+                msg_state["finalized"] = True
+
+                # Close live_instance if it exists
+                if msg_state["live_instance"] is not None:
+                    msg_state["live_instance"].__exit__(None, None, None)
+                    msg_state["live_instance"] = None
+
+                # Display the final user message
                 display_message(self.server, self.local_name, self.remote_name, u_role, full_prompt)
                 self.add_message(u_role, full_prompt)
 
-                # Call LLM once with full prompt
+                # Now we process the prompt fully
                 answer = await safe_get_response(
                     lambda q: get_response(self.responder_handler, self.output_adapter, q, self.conversation, self.stream, self.local_name, console),
                     full_prompt
                 )
                 self.add_message("responder", answer)
 
-                # Send final response
+                # Send the final response message back
                 try:
                     if self.stream and hasattr(self.responder_handler, "get_response_stream"):
-                        await self.output_adapter.write_message({"role": "Responder", "partial": False})
+                        await self.output_adapter.write_message({"role": "Responder", "partial": False, "request_id": request_id})
                     else:
-                        await self.output_adapter.write_message({"role": "Responder", "message": answer})
+                        await self.output_adapter.write_message({"role": "Responder", "message": answer, "request_id": request_id})
                         display_message(self.server, self.local_name, self.remote_name, "responder", answer)
                 except (ConnectionClosedError, EOFError) as e:
                     log.debug(f"Failed to send responder message: {e}")
-                    # Don't break, just continue to next message
-                    continue
+
+                # Remove the entry from partial_messages since we're done with this request_id
+                del partial_messages[request_id]
+
 
     async def handle_user_input(self):
         # For client mode, handle user input similarly
