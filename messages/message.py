@@ -29,5 +29,5 @@ class MessageModel(BaseModel):
         if not partial and (msg is None or msg.strip() == ""):
             raise ValueError("Non-partial messages must have non-empty 'message' content.")
         
-        # return the message instance after validation
+        # return the message
         return values

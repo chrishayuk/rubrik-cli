@@ -22,7 +22,6 @@ async def server_handler(websocket, path, message_queue: asyncio.Queue):
     logger.info(f"New client connected. Total clients: {len(connected_clients)}")
 
     try:
-        # Continuously read messages from this client until they disconnect or send 'exit'
         async for raw_message in websocket:
             logger.debug(f"Received raw message from client: {raw_message}")
 
@@ -55,9 +54,8 @@ async def server_handler(websocket, path, message_queue: asyncio.Queue):
                     await websocket.send(json.dumps(error_response))
                     continue
 
-                # Validation passed, forward downstream
+                # Validation passed
                 structured_message = message_obj.model_dump_json()
-                await message_queue.put(structured_message)
 
             else:
                 # Validate unstructured message
@@ -69,15 +67,18 @@ async def server_handler(websocket, path, message_queue: asyncio.Queue):
                     await websocket.send("Invalid message. Please send a non-empty message.")
                     continue
 
-                # Validation passed, forward downstream
+                # Validation passed
                 structured_message = message_obj.model_dump_json()
-                await message_queue.put(structured_message)
 
-                # If needed, respond in plain text:
-                # await websocket.send("Received your message.")
+            # Add was_structured info to the message before putting it on the queue
+            # Since structured_message is JSON, convert to dict, add was_structured, and re-serialize
+            message_dict = json.loads(structured_message)
+            message_dict["was_structured"] = was_structured
+
+            # Put the updated message dict as JSON back into the queue
+            await message_queue.put(json.dumps(message_dict))
 
     except ConnectionClosedError as e:
-        # The client disconnected unexpectedly.
         logger.info(f"Client connection closed unexpectedly: {e}")
     except Exception as e:
         logger.error(f"An error occurred while handling client: {e}")
@@ -105,5 +106,5 @@ async def start_server(server_ws_uri: str, message_queue: asyncio.Queue):
         close_timeout=None
     ):
         logger.info(f"WebSocket server running at {server_ws_uri}")
-        # Keep the server running indefinitely, even if clients connect/disconnect
+        # Keep the server running indefinitely
         await asyncio.Future()
