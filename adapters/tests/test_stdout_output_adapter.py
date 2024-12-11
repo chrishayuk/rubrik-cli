@@ -5,32 +5,48 @@ from unittest.mock import MagicMock, patch
 from adapters.output.stdout_output_adapter import StdOutOutput
 
 @pytest.mark.asyncio
-async def test_stdout_output_write_message():
+async def test_stdout_output_write_message_valid(capsys):
     adapter = StdOutOutput()
+    data = {"role": "Responder", "message": "Hello!"}
+    await adapter.write_message(data)
 
-    # Prepare a mock for sys.stdout
-    mock_stdout = MagicMock()
-    with patch.object(sys, 'stdout', mock_stdout):
-        data = {"role": "Responder", "message": "Hello!"}
+    captured = capsys.readouterr()
+    assert captured.out.strip() == json.dumps(data)
+
+@pytest.mark.asyncio
+async def test_stdout_output_write_message_empty_message(capsys):
+    adapter = StdOutOutput()
+    data = {"role": "Responder", "message": ""}
+    await adapter.write_message(data)
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == json.dumps(data)
+
+@pytest.mark.asyncio
+async def test_stdout_output_write_message_non_serializable():
+    adapter = StdOutOutput()
+    data = {"role": "Responder", "message": {"non_serializable": set([1,2,3])}}
+    with pytest.raises(EOFError, match="Unable to serialize data"):
         await adapter.write_message(data)
 
-        # The adapter writes JSON + newline
-        expected_output = json.dumps(data) + "\n"
+@pytest.mark.asyncio
+async def test_stdout_output_write_message_failure():
+    adapter = StdOutOutput()
+    data = {"role": "Responder", "message": "Test"}
 
-        # Check that sys.stdout.write() was called with the expected output
-        mock_stdout.write.assert_called_once_with(expected_output)
+    mock_stdout = MagicMock()
+    mock_stdout.write.side_effect = Exception("Write failed")
 
-        # Check that sys.stdout.flush() was called
-        mock_stdout.flush.assert_called_once()
+    with patch.object(sys, 'stdout', mock_stdout):
+        with pytest.raises(EOFError, match="Failed to write to stdout"):
+            await adapter.write_message(data)
 
 @pytest.mark.asyncio
 async def test_stdout_output_start():
     adapter = StdOutOutput()
-    # start does nothing, should not raise an exception
-    await adapter.start()
+    await adapter.start()  # no error expected
 
 @pytest.mark.asyncio
 async def test_stdout_output_stop():
     adapter = StdOutOutput()
-    # stop does nothing, should not raise an exception
-    await adapter.stop()
+    await adapter.stop()  # no error expected

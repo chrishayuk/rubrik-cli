@@ -3,11 +3,23 @@ import json
 import sys
 from adapters.output.output_adapter import OutputAdapter
 
-
 class StdOutOutput(OutputAdapter):
+    async def start(self):
+        pass
+
     async def write_message(self, data: dict):
         # convert the dictionary to a JSON string and write it to stdout
-        sys.stdout.write(json.dumps(data) + "\n")
+        try:
+            message_str = json.dumps(data) + "\n"
+        except (TypeError, ValueError) as e:
+            # If data cannot be serialized, raise an EOFError for consistency
+            raise EOFError(f"Unable to serialize data: {e}")
 
-        # flush the output buffer to ensure that the message is immediately displayed
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(message_str)
+            sys.stdout.flush()
+        except Exception as e:
+            raise EOFError(f"Failed to write to stdout: {e}")
+
+    async def stop(self):
+        pass

@@ -10,12 +10,16 @@ class StdInInput(InputAdapter):
         self.process = None
 
     async def start(self):
-        self.process = await asyncio.create_subprocess_exec(
-            *self.cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        try:
+            self.process = await asyncio.create_subprocess_exec(
+                *self.cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        except Exception as e:
+            # If process fails to start
+            raise EOFError(f"Failed to start subprocess: {e}")
 
     async def read_message(self) -> dict:
         if not self.process or self.process.stdout is None:
@@ -27,14 +31,20 @@ class StdInInput(InputAdapter):
             raise EOFError("Timed out waiting for input.")
 
         if not line:
+            # EOF reached from the subprocess
             raise EOFError("EOF reached.")
 
         line_str = line.decode('utf-8').strip()
+        if not line_str:
+            # Empty line, treat as EOF or just retry?
+            # Here we consider empty line as EOF for simplicity
+            raise EOFError("EOF reached (empty line).")
+
         try:
             msg = json.loads(line_str)
         except json.JSONDecodeError:
-            # If not JSON, wrap in a generic dict
-            msg = {"role": "assistant", "message": line_str}
+            raise EOFError("Invalid JSON received from subprocess.")
+
         return msg
 
     async def stop(self):
