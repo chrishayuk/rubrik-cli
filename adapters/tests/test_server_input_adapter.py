@@ -1,51 +1,58 @@
 import pytest
 import asyncio
-import json
+from unittest.mock import AsyncMock
 from adapters.input.server_input_adapter import ServerInputAdapter
+import json
 
 @pytest.mark.asyncio
 async def test_server_input_adapter_start():
-    # Test that start() does nothing and doesn't raise exceptions
     q = asyncio.Queue()
-    adapter = ServerInputAdapter(message_queue=q)
-    await adapter.start()  # should do nothing
+    adapter = ServerInputAdapter(q)
+    await adapter.start()  # no error expected
 
 @pytest.mark.asyncio
 async def test_server_input_adapter_stop():
-    # Test that stop() does nothing and doesn't raise exceptions
     q = asyncio.Queue()
-    adapter = ServerInputAdapter(message_queue=q)
-    await adapter.stop()  # should do nothing
+    adapter = ServerInputAdapter(q)
+    await adapter.start()
+    await adapter.stop()
+
+    with pytest.raises(EOFError, match="Adapter is stopped"):
+        await adapter.read_message()
 
 @pytest.mark.asyncio
-async def test_server_input_adapter_read_message_valid():
-    # Test reading a valid JSON message
+async def test_server_input_adapter_read_valid_message():
     q = asyncio.Queue()
-
-    msg = {"role": "Questioner", "message": "hello"}
-    await q.put(json.dumps(msg))
-
-    adapter = ServerInputAdapter(message_queue=q)
-    result = await adapter.read_message()
-    assert result == msg
+    await q.put(json.dumps({"role": "Questioner", "message": "Hello"}))
+    adapter = ServerInputAdapter(q)
+    await adapter.start()
+    msg = await adapter.read_message()
+    assert msg == {"role": "Questioner", "message": "Hello"}
 
 @pytest.mark.asyncio
-async def test_server_input_adapter_read_message_empty_queue():
-    # If the queue is empty, read_message should wait.
-    # We'll test that read_message doesn't crash or behave unexpectedly
+async def test_server_input_adapter_read_none():
     q = asyncio.Queue()
-    adapter = ServerInputAdapter(message_queue=q)
-
-    # We'll put a message after a short delay to mimic real asynchronous behavior
-    async def put_message():
-        await asyncio.sleep(0.1)
-        await q.put(json.dumps({"role": "Questioner", "message": "delayed"}))
-
-    asyncio.create_task(put_message())
-    result = await adapter.read_message()
-    assert result == {"role": "Questioner", "message": "delayed"}
+    await q.put(None)  # signal no more messages
+    adapter = ServerInputAdapter(q)
+    await adapter.start()
+    with pytest.raises(EOFError, match="No more messages"):
+        await adapter.read_message()
 
 @pytest.mark.asyncio
-async def test_server_input_adapter_read_message_invalid_json():
-    # Test what happens if the queue receives invalid JSON
-    q = asyncio
+async def test_server_input_adapter_read_invalid_json():
+    q = asyncio.Queue()
+    await q.put("Not JSON")
+    adapter = ServerInputAdapter(q)
+    await adapter.start()
+    with pytest.raises(EOFError, match="Invalid JSON"):
+        await adapter.read_message()
+
+@pytest.mark.asyncio
+async def test_server_input_adapter_read_unexpected_exception():
+    q = AsyncMock()
+    q.get.side_effect = Exception("Unexpected error")
+
+    adapter = ServerInputAdapter(q)
+    await adapter.start()
+    with pytest.raises(EOFError, match="Unexpected error while reading message"):
+        await adapter.read_message()
