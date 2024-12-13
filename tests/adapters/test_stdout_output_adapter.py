@@ -2,7 +2,7 @@ import pytest
 import sys
 import json
 from unittest.mock import MagicMock, patch
-from adapters.output.stdout_output_adapter import StdOutOutput
+from src.adapters.output.stdout_output_adapter import StdOutOutput
 
 @pytest.mark.asyncio
 async def test_stdout_output_write_message_valid(capsys):

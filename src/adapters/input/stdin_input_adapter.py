@@ -1,7 +1,7 @@
 # adapters/input/stdin_input_adapter.py
 import asyncio
 import json
-from adapters.input.input_adapter import InputAdapter
+from .input_adapter import InputAdapter
 
 class StdInInput(InputAdapter):
     def __init__(self, cmd: list, timeout: float = 5.0, max_retries=3, retry_delay=1.0):

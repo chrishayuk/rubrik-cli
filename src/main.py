@@ -3,7 +3,7 @@ import asyncio
 import logging
 from arg_parser import parse_args, Config
 from adapters_factory import create_input_adapter, create_output_adapter
-from chat_handler import ChatHandler
+from chat_handler.chat_handler import ChatHandler
 from ws_server import start_server
 
 # setup the logger

@@ -1,5 +1,5 @@
 import pytest
-from adapters.output.output_adapter import OutputAdapter
+from src.adapters.output.output_adapter import OutputAdapter
 
 @pytest.mark.asyncio
 async def test_output_adapter_start():

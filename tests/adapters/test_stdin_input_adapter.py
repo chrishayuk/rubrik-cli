@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from adapters.input.stdin_input_adapter import StdInInput
+from src.adapters.input.stdin_input_adapter import StdInInput
 import json
 
 @pytest.mark.asyncio

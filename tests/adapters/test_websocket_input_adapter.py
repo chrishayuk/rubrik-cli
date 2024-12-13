@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 import json
 from websockets.exceptions import ConnectionClosedError
-from adapters.input.websocket_input_adapter import WebSocketInput
+from src.adapters.input.websocket_input_adapter import WebSocketInput
 
 @pytest.mark.asyncio
 async def test_websocket_input_start_success():

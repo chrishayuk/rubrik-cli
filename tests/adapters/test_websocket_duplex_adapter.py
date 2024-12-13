@@ -3,7 +3,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 from websockets.exceptions import ConnectionClosedError
-from adapters.duplex.websocket_duplex_adapter import WebSocketDuplexAdapter
+from src.adapters.duplex.websocket_duplex_adapter import WebSocketDuplexAdapter
 
 
 @pytest.mark.asyncio

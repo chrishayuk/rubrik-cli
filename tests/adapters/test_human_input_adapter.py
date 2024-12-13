@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import patch
-from adapters.input.human_input_adapter import HumanInput
+from src.adapters.input.human_input_adapter import HumanInput
 
 @pytest.mark.asyncio
 async def test_human_input_basic():

@@ -1,5 +1,5 @@
 # adapters/output/human_output_adapter.py
-from adapters.output.output_adapter import OutputAdapter
+from .output_adapter import OutputAdapter
 
 class HumanOutput(OutputAdapter):
     def __init__(self, renderer=None):

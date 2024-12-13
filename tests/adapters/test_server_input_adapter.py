@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock
-from adapters.input.server_input_adapter import ServerInputAdapter
+from src.adapters.input.server_input_adapter import ServerInputAdapter
 import json
 
 @pytest.mark.asyncio

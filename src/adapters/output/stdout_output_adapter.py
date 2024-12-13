@@ -1,7 +1,7 @@
 # adapters/output/stdout_output_adapter.py
 import json
 import sys
-from adapters.output.output_adapter import OutputAdapter
+from .output_adapter import OutputAdapter
 
 class StdOutOutput(OutputAdapter):
     async def start(self):

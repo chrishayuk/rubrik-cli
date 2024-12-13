@@ -1,7 +1,7 @@
 # adapters/input/human_input_adapter.py
 import asyncio
 import logging
-from adapters.input.input_adapter import InputAdapter
+from .input_adapter import InputAdapter
 
 logger = logging.getLogger(__name__)
 

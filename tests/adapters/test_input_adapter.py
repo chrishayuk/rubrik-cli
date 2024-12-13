@@ -1,5 +1,5 @@
 import pytest
-from adapters.input.input_adapter import InputAdapter
+from src.adapters.input.input_adapter import InputAdapter
 
 @pytest.mark.asyncio
 async def test_input_adapter_read_message_not_implemented():

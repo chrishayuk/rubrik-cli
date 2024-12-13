@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import AsyncMock
-from adapters.output.server_output_adapter import ServerOutputAdapter
+from src.adapters.output.server_output_adapter import ServerOutputAdapter
 
 @pytest.mark.asyncio
 async def test_server_output_adapter_start():

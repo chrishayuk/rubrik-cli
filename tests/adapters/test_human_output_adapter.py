@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from adapters.output.human_output_adapter import HumanOutput
+from src.adapters.output.human_output_adapter import HumanOutput
 
 @pytest.mark.asyncio
 async def test_human_output_write_message_with_custom_renderer():

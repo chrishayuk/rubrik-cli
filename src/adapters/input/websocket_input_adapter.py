@@ -4,7 +4,7 @@ import asyncio
 import logging
 import websockets
 from websockets.exceptions import ConnectionClosedError
-from adapters.input.input_adapter import InputAdapter
+from .input_adapter import InputAdapter
 
 log = logging.getLogger(__name__)
 
