@@ -3,11 +3,11 @@ import logging
 from websockets.exceptions import ConnectionClosedError
 
 from chat_handler.conversation_manager import ConversationManager
-from chat_handler.response_handler_factory import create_response_handler
 from chat_handler.server_input_handler import handle_server_input
 from chat_handler.user_input_handler import handle_user_input
 from chat_handler.server_messages_handler import handle_server_messages
 from chat_handler.adapters import start_adapters, stop_adapters
+from src.response_handlers.response_handler_factory import create_response_handler
 
 from ui_utils import print_environment_info, print_prompt, console
 from rich.panel import Panel

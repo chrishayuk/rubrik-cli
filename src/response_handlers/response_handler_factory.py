@@ -1,7 +1,8 @@
-from response_handlers.human_handler import HumanHandler
-from response_handlers.llm_handler import LLMHandler
-from response_handlers.persona_handler import PersonaHandler
-from response_handlers.forwarder_handler import ForwarderHandler
+# response_handlers/response_handler_factory.py
+from .human_handler import HumanHandler
+from .llm_handler import LLMHandler
+from .persona_handler import PersonaHandler
+from .forwarder_handler import ForwarderHandler
 
 def create_response_handler(mode: str, provider: str, model: str, persona: str = None):
     if mode == "human":

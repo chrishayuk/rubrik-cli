@@ -1,5 +1,4 @@
 # response_handlers/forwarder_handler.py
-
 class ForwarderHandler:
     def get_response(self, question: str, conversation: list) -> str:
         # Just return the question unchanged.
