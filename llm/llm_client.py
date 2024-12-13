@@ -1,3 +1,4 @@
+# llm/llm_client
 import os
 import uuid
 import ollama
@@ -80,10 +81,12 @@ class LLMClient:
             # OpenAI's Python client returns a generator for streamed responses
             for partial in response:
                 if partial.choices and partial.choices[0].delta and 'content' in partial.choices[0].delta:
-                    yield partial.choices[0].delta.content
+                    # Access content via dictionary key
+                    yield partial.choices[0].delta["content"]
         except Exception as e:
             logging.error(f"OpenAI API Error (stream): {str(e)}")
             raise ValueError(f"OpenAI API Error: {str(e)}")
+
 
     def _ollama_completion(self, messages: List[Dict], tools: List) -> Dict[str, Any]:
         """Handle Ollama chat completions (non-streaming)."""
