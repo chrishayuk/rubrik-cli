@@ -5,8 +5,8 @@ import uuid
 import websockets
 from urllib.parse import urlparse
 from websockets.exceptions import ConnectionClosedError
-from pydantic import ValidationError
-from messages.message import MessageModel
+from pydantic import ValidationError, parse_obj_as
+from messages.message_types import MessageUnion  # Import your union of message models
 
 logger = logging.getLogger(__name__)
 
@@ -15,17 +15,8 @@ connected_clients = set()
 async def server_handler(websocket: websockets.WebSocketServerProtocol, message_queue: asyncio.Queue) -> None:
     """
     Handles individual WebSocket client connections.
-    Receives messages, validates and wraps them into a standardized format (MessageModel),
-    then puts them into the message_queue for further processing by downstream handlers.
-
-    Parameters
-    ----------
-    websocket : websockets.WebSocketServerProtocol
-        The client's websocket connection.
-    path : str
-        The requested path for the websocket (unused in this example).
-    message_queue : asyncio.Queue
-        A queue where validated messages will be placed for downstream processing.
+    Receives messages, validates and converts them into a standardized format (using MessageUnion),
+    then puts them into the message_queue for further processing.
     """
     connected_clients.add(websocket)
     logger.info(f"New client connected. Total clients: {len(connected_clients)}")
@@ -39,30 +30,39 @@ async def server_handler(websocket: websockets.WebSocketServerProtocol, message_
                 data = json.loads(raw_message)
                 was_structured = True
             except json.JSONDecodeError:
-                # Not valid JSON, treat as plain text
+                # Not valid JSON, treat as a simple chat message from a Questioner
                 was_structured = False
                 data = {
                     "role": "Questioner",
+                    "type": "chat",
                     "message": raw_message,
                     "partial": False
                 }
 
-            # Validate message using MessageModel
+            # Validate message using MessageUnion
             try:
-                message_obj = MessageModel(**data)
+                # Use parse_obj_as for union parsing
+                message_obj = parse_obj_as(MessageUnion, data)
             except ValidationError as ve:
                 # Validation failed
                 request_id = data.get("request_id", str(uuid.uuid4()))
                 logger.error(f"Message validation failed: {ve.errors()}")
 
+                # Convert errors to a JSON-serializable structure
+                error_list = ve.errors()
+                for err in error_list:
+                    if 'ctx' in err and 'error' in err['ctx']:
+                        # Convert the exception object to a string
+                        err['ctx']['error'] = str(err['ctx']['error'])
+
                 if was_structured:
-                    # For structured messages, return a structured error response
+                    # Return a structured error response
                     error_response = {
                         "role": "Server",
                         "message": "Validation error: One or more fields are invalid.",
                         "partial": False,
                         "request_id": request_id,
-                        "errors": ve.errors()
+                        "errors": error_list
                     }
                     await websocket.send(json.dumps(error_response))
                 else:
@@ -95,13 +95,6 @@ async def server_handler(websocket: websockets.WebSocketServerProtocol, message_
 async def start_server(server_ws_uri: str, message_queue: asyncio.Queue) -> None:
     """
     Starts the WebSocket server and runs indefinitely.
-
-    Parameters
-    ----------
-    server_ws_uri : str
-        The URI at which to start the WebSocket server (e.g. "ws://localhost:9000").
-    message_queue : asyncio.Queue
-        A queue to which incoming validated messages are sent.
     """
     parsed = urlparse(server_ws_uri)
     host = parsed.hostname

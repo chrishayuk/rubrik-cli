@@ -33,7 +33,7 @@ The following script allows you to connect the cli to a websocket server, but al
 the following starts up a client as a websocket server
 
 ```bash
-python main.py \
+uv run src/main.py \
     --mode human \
     --input websocket \
     --output stdout \
@@ -43,13 +43,13 @@ python main.py \
 ```
 
 ```bash
-python main.py \
+uv run src/main.py \
     --mode persona \
     --input websocket \
     --output stdout \
     --server \
     --server-ws-uri ws://127.0.0.1:8045 \
-    --persona sassy_persona
+    --persona sassy_persona \
     --stream
 ```
 
@@ -58,7 +58,7 @@ the following connects a client to the server
 it allows us to enter human inputs, but send output to the server
 
 ```bash
-python main.py \
+uv run src/main.py \
     --mode human \
     --input human \
     --output websocket \

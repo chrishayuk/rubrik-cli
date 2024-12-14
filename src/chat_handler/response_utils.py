@@ -4,6 +4,7 @@ import logging
 from rich.panel import Panel
 from rich.text import Text
 from rich.live import Live
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ async def async_token_generator(responder_handler, question: str, conversation):
     else:
         for token in stream_gen:
             yield token
-            await asyncio.sleep(0)  # Let event loop run
+            await asyncio.sleep(0)  # Let the event loop run
 
 async def safe_get_response(get_response_func, question: str):
     try:
@@ -24,8 +25,21 @@ async def safe_get_response(get_response_func, question: str):
         log.debug(f"Failed to get response: {e}")
         return ""
 
-async def get_response(responder_handler, output_adapter, question: str, conversation, stream: bool, local_name: str, console):
-    # Similar logic as before, but externalized
+async def get_response(
+    responder_handler,
+    output_adapter,
+    question: str,
+    conversation,
+    stream: bool,
+    local_name: str,
+    console,
+    request_id: Optional[str] = None
+):
+    """
+    Gets the response from the responder_handler and either streams or returns it.
+    If streaming is enabled, partial tokens are sent as they are generated.
+    Includes request_id in all messages if provided.
+    """
     if stream and hasattr(responder_handler, "get_response_stream"):
         answer = ""
         style_name = "assistant"
@@ -33,7 +47,7 @@ async def get_response(responder_handler, output_adapter, question: str, convers
 
         text_content = Text("", style=style_name)
         panel = Panel(text_content, title=display_role, border_style=style_name, expand=True)
-        
+
         token_buffer = []
         tokens_before_update = 5
 
@@ -50,12 +64,16 @@ async def get_response(responder_handler, output_adapter, question: str, convers
                     live.update(updated_panel)
                     live.refresh()
 
+                    msg = {
+                        "role": "Responder",
+                        "message": flushed,
+                        "partial": True
+                    }
+                    if request_id:
+                        msg["request_id"] = str(request_id)
+
                     try:
-                        await output_adapter.write_message({
-                            "role": "Responder",
-                            "message": flushed,
-                            "partial": True
-                        })
+                        await output_adapter.write_message(msg)
                     except Exception as e:
                         log.debug(f"Failed streaming token batch: {e}")
                         break
@@ -69,17 +87,26 @@ async def get_response(responder_handler, output_adapter, question: str, convers
                 live.update(updated_panel)
                 live.refresh()
 
+                msg = {
+                    "role": "Responder",
+                    "message": flushed,
+                    "partial": True
+                }
+                if request_id:
+                    msg["request_id"] = str(request_id)
+
                 try:
-                    await output_adapter.write_message({
-                        "role": "Responder",
-                        "message": flushed,
-                        "partial": True
-                    })
+                    await output_adapter.write_message(msg)
                 except Exception as e:
                     log.debug(f"Failed streaming final token batch: {e}")
 
+        # Send final non-partial message to indicate streaming is done
+        final_msg = {"role": "Responder", "partial": False}
+        if request_id:
+            final_msg["request_id"] = str(request_id)
+
         try:
-            await output_adapter.write_message({"role": "Responder", "partial": False})
+            await output_adapter.write_message(final_msg)
         except Exception as e:
             log.debug(f"Failed to send final partial=False message: {e}")
 
@@ -90,5 +117,18 @@ async def get_response(responder_handler, output_adapter, question: str, convers
             answer = await responder_handler.get_response(question, conversation)
         else:
             answer = responder_handler.get_response(question, conversation)
+
+        # If you need to send a message here (non-streaming final), do so:
+        # msg = {
+        #     "role": "Responder",
+        #     "message": answer,
+        #     "partial": False
+        # }
+        # if request_id:
+        #     msg["request_id"] = str(request_id)
+        # try:
+        #     await output_adapter.write_message(msg)
+        # except Exception as e:
+        #     log.debug(f"Failed to send non-streamed responder message: {e}")
 
         return answer
