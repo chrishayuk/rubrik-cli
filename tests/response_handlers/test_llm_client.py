@@ -1,7 +1,7 @@
 import pytest
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.llm.llm_client import LLMClient
+from src.response_handlers.llm_client import LLMClient
 
 @pytest.fixture
 def mock_env_openai(monkeypatch):
@@ -31,7 +31,7 @@ def test_init_ollama_no_attr(mocker):
     # Simulate that ollama does not have a chat attribute
     mock_ollama = MagicMock()
     del mock_ollama.chat
-    with patch("src.llm.llm_client.ollama", mock_ollama):
+    with patch("src.response_handlers.llm_client.ollama", mock_ollama):
         with pytest.raises(ValueError, match="Ollama is not properly configured"):
             LLMClient(provider="ollama", model="some-model")
 
@@ -39,7 +39,7 @@ def test_init_ollama(mocker):
     # Simulate ollama having the chat attribute
     mock_ollama = MagicMock()
     mock_ollama.chat = MagicMock()
-    with patch("src.llm.llm_client.ollama", mock_ollama):
+    with patch("src.response_handlers.llm_client.ollama", mock_ollama):
         client = LLMClient(provider="ollama", model="some-model")
         assert client.provider == "ollama"
 
@@ -68,7 +68,7 @@ def test_create_completion(provider, mock_env_openai, mocker, messages):
         # Need to also patch ollama since constructor checks for `ollama.chat` attribute
         mock_ollama = MagicMock()
         mock_ollama.chat = MagicMock()
-        with patch("src.llm.llm_client.ollama", mock_ollama):
+        with patch("src.response_handlers.llm_client.ollama", mock_ollama):
             client = LLMClient(provider="ollama", model="some-model")
             resp = client.create_completion(messages)
             assert resp == mock_response
@@ -84,7 +84,7 @@ def test_openai_completion_non_streaming(mock_env_openai, messages, mocker):
     mock_response.choices = [mock_choice]
     mock_openai_instance.chat.completions.create.return_value = mock_response
 
-    with patch("src.llm.llm_client.OpenAI", return_value=mock_openai_instance):
+    with patch("src.response_handlers.llm_client.OpenAI", return_value=mock_openai_instance):
         client = LLMClient(provider="openai", model="test-model")
         response = client.create_completion(messages)
         assert response["response"] == "Test response"
@@ -94,7 +94,7 @@ def test_openai_completion_error(mock_env_openai, messages, mocker):
     mock_openai_instance = MagicMock()
     mock_openai_instance.chat.completions.create.side_effect = Exception("API Error")
 
-    with patch("src.llm.llm_client.OpenAI", return_value=mock_openai_instance):
+    with patch("src.response_handlers.llm_client.OpenAI", return_value=mock_openai_instance):
         client = LLMClient(provider="openai", model="test-model")
         with pytest.raises(ValueError, match="OpenAI API Error: API Error"):
             client.create_completion(messages)
@@ -110,7 +110,7 @@ def test_openai_completion_stream(mock_env_openai, messages, mocker):
     mock_openai_instance = MagicMock()
     mock_openai_instance.chat.completions.create.return_value = iter(mock_stream_resp)
 
-    with patch("src.llm.llm_client.OpenAI", return_value=mock_openai_instance):
+    with patch("src.response_handlers.llm_client.OpenAI", return_value=mock_openai_instance):
         client = LLMClient(provider="openai", model="test-model")
         stream = client.create_completion_stream(messages)
         streamed_text = "".join(list(stream))
@@ -124,7 +124,7 @@ def test_ollama_completion_non_streaming(mocker, messages):
     mock_response = MagicMock(message=mock_message)
     mock_ollama.chat.return_value = mock_response
 
-    with patch("src.llm.llm_client.ollama", mock_ollama):
+    with patch("src.response_handlers.llm_client.ollama", mock_ollama):
         client = LLMClient(provider="ollama", model="test-model")
         response = client.create_completion(messages)
         assert response["response"] == "Ollama test response"
@@ -134,7 +134,7 @@ def test_ollama_completion_error(mocker, messages):
     mock_ollama = MagicMock()
     mock_ollama.chat.side_effect = Exception("Ollama Error")
 
-    with patch("src.llm.llm_client.ollama", mock_ollama):
+    with patch("src.response_handlers.llm_client.ollama", mock_ollama):
         client = LLMClient(provider="ollama", model="test-model")
         with pytest.raises(ValueError, match="Ollama API Error: Ollama Error"):
             client.create_completion(messages)
@@ -143,7 +143,7 @@ def test_ollama_completion_stream(mocker, messages):
     mock_ollama = MagicMock()
     # ollama.chat with stream=True returns an iterator
     mock_ollama.chat.return_value = iter(["Ollama", " ", "stream", " response"])
-    with patch("src.llm.llm_client.ollama", mock_ollama):
+    with patch("src.response_handlers.llm_client.ollama", mock_ollama):
         client = LLMClient(provider="ollama", model="test-model")
         stream = client.create_completion_stream(messages)
         streamed_text = "".join(list(stream))

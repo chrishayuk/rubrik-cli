@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 connected_clients = set()
 
-async def server_handler(websocket: websockets.WebSocketServerProtocol, path: str, message_queue: asyncio.Queue) -> None:
+async def server_handler(websocket: websockets.WebSocketServerProtocol, message_queue: asyncio.Queue) -> None:
     """
     Handles individual WebSocket client connections.
     Receives messages, validates and wraps them into a standardized format (MessageModel),
@@ -111,7 +111,7 @@ async def start_server(server_ws_uri: str, message_queue: asyncio.Queue) -> None
 
     # Disable ping and timeout intervals to reduce unintended disconnections
     async with websockets.serve(
-        lambda ws, p: server_handler(ws, p, message_queue),
+        lambda ws: server_handler(ws, message_queue),
         host,
         port,
         ping_interval=None,

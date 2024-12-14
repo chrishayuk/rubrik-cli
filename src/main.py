@@ -8,7 +8,7 @@ from ws_server import start_server
 
 # setup the logger
 logger = logging.getLogger(__name__)
-logging_level = logging.DEBUG
+logging_level = logging.INFO
 
 def setup_logging(level=logging_level) -> None:
     """Configure logging for the application."""

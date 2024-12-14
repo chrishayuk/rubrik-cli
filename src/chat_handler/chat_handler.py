@@ -6,7 +6,7 @@ from .server_input_handler import handle_server_input
 from .user_input_handler import handle_user_input
 from .server_messages_handler import handle_server_messages
 from .adapters import start_adapters, stop_adapters
-from .ui_utils import print_environment_info, print_prompt, console
+from .ui_utils import print_environment_info, print_prompt, console, print_panel
 from response_handlers.response_handler_factory import create_response_handler
 from rich.panel import Panel
 
@@ -84,9 +84,12 @@ class ChatHandler:
 
                 # Wait for tasks to complete
                 await asyncio.gather(*tasks)
+
         except (ConnectionClosedError, EOFError) as e:
             log.debug(f"Connection ended abruptly: {e}")
+        except Exception as e:
+            # Catch any unexpected exceptions to help with debugging
+            log.error(f"An unexpected error occurred in run(): {e}", exc_info=True)
         finally:
             await stop_adapters(self.input_adapter, self.output_adapter)
-            from chat_handler.ui_utils import print_panel
             print_panel("Chat", "The conversation has concluded. Thank you.", "system")
