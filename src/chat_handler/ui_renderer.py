@@ -3,7 +3,7 @@ from typing import Optional
 from rich.panel import Panel
 from rich.text import Text
 from rich.live import Live
-from ui_utils import role_to_display_name, print_prompt, display_message, console
+from .ui_utils import role_to_display_name, print_prompt, display_message, console
 
 class UIRenderer:
     def __init__(self):

@@ -2,8 +2,9 @@
 import asyncio
 import logging
 from websockets.exceptions import ConnectionClosedError
-from chat_handler.ui_renderer import UIRenderer
+from .ui_renderer import UIRenderer
 
+# logging
 log = logging.getLogger(__name__)
 
 async def handle_user_input(chat_handler):

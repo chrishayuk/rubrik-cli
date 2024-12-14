@@ -1,15 +1,13 @@
 import asyncio
 import logging
 from websockets.exceptions import ConnectionClosedError
-
-from chat_handler.conversation_manager import ConversationManager
-from chat_handler.server_input_handler import handle_server_input
-from chat_handler.user_input_handler import handle_user_input
-from chat_handler.server_messages_handler import handle_server_messages
-from chat_handler.adapters import start_adapters, stop_adapters
-from src.response_handlers.response_handler_factory import create_response_handler
-
-from ui_utils import print_environment_info, print_prompt, console
+from .conversation_manager import ConversationManager
+from .server_input_handler import handle_server_input
+from .user_input_handler import handle_user_input
+from .server_messages_handler import handle_server_messages
+from .adapters import start_adapters, stop_adapters
+from .ui_utils import print_environment_info, print_prompt, console
+from response_handlers.response_handler_factory import create_response_handler
 from rich.panel import Panel
 
 log = logging.getLogger(__name__)
@@ -90,5 +88,5 @@ class ChatHandler:
             log.debug(f"Connection ended abruptly: {e}")
         finally:
             await stop_adapters(self.input_adapter, self.output_adapter)
-            from ui_utils import print_panel
+            from chat_handler.ui_utils import print_panel
             print_panel("Chat", "The conversation has concluded. Thank you.", "system")

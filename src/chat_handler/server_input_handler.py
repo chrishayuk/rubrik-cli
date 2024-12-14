@@ -2,10 +2,9 @@
 import asyncio
 import logging
 from websockets.exceptions import ConnectionClosedError
-from response_utils import get_response, safe_get_response
-
-from chat_handler.ui_renderer import UIRenderer
-from ui_utils import display_message, console
+from .response_utils import get_response, safe_get_response
+from .ui_renderer import UIRenderer
+from .ui_utils import display_message, console
 
 log = logging.getLogger(__name__)
 

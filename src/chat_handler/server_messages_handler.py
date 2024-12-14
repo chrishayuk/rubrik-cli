@@ -2,15 +2,11 @@
 import asyncio
 import logging
 from websockets.exceptions import ConnectionClosedError
-from chat_handler.ui_renderer import UIRenderer
+from .ui_renderer import UIRenderer
 
 log = logging.getLogger(__name__)
 
 async def handle_server_messages(chat_handler):
-    """
-    Handles incoming messages from the server in client mode.
-    Uses UIRenderer to handle Rich UI logic, keeping this file focused on message logic.
-    """
     ui_renderer = UIRenderer()
 
     while True:
@@ -22,6 +18,10 @@ async def handle_server_messages(chat_handler):
             continue
         except ConnectionClosedError as e:
             log.debug(f"Connection closed while reading server messages: {e}, waiting and continuing.")
+            await asyncio.sleep(0.5)
+            continue
+        except Exception as e:
+            log.debug(f"Unexpected error while reading server messages: {e}, waiting and continuing.")
             await asyncio.sleep(0.5)
             continue
 
@@ -38,7 +38,6 @@ async def handle_server_messages(chat_handler):
         else:
             # Handle complete messages
             if ui_renderer.is_streaming:
-                # End streaming if ongoing
                 ui_renderer.end_streaming()
                 await ui_renderer.after_message(server_mode=False)
             else:

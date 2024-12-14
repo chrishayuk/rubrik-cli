@@ -1,6 +1,6 @@
 # response_handlers/llm_handler.py
 from typing import List, Dict
-from src.llm.llm_client import LLMClient
+from llm.llm_client import LLMClient
 
 class LLMHandler:
     def __init__(self, provider: str, model: str, system_prompt: str = None):
