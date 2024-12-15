@@ -4,7 +4,7 @@ import logging
 import uuid
 from websockets.exceptions import ConnectionClosedError
 from pydantic import ValidationError, parse_obj_as
-from messages.message_types import MessageUnion, ChatMessage, HealthCheckMessage
+from messages.message_types import MessageUnion
 from .response_utils import get_response, safe_get_response
 from .ui_renderer import UIRenderer
 from .ui_utils import display_message, console
@@ -13,13 +13,10 @@ log = logging.getLogger(__name__)
 
 async def handle_server_input(chat_handler):
     """
-    Handles input from the server in server mode. This function reads messages
-    from the input_adapter, which are typically user prompts from a client,
-    and then responds using the responder_handler associated with the chat_handler.
-
-    Uses UIRenderer to handle the display of partial and complete messages.
-    Since multiple request_ids can be handled at once, we store a separate
-    UIRenderer instance for each request_id in partial_messages.
+    Handles input from the server in server mode.
+    Processes user messages, including partial and complete messages, and obtains
+    responses from the responder. If streaming is enabled, the final completion
+    message is now handled by `get_response` only, to avoid duplication.
     """
     # Track ongoing partial messages per request_id
     partial_messages = {}
@@ -46,14 +43,12 @@ async def handle_server_input(chat_handler):
             message_obj = parse_obj_as(MessageUnion, user_msg)
         except ValidationError as ve:
             log.error(f"Message validation failed: {ve.errors()}")
-            # Optionally send an error response back to the client here
             continue
 
         # Extract fields from the validated model
         role = message_obj.role.value  # role is an Enum, get its string value
         request_id = str(message_obj.request_id)  # Convert UUID to string
         partial = getattr(message_obj, 'partial', False)
-        # If it's a ChatMessage, it will have a 'message', if HealthCheckMessage, no message needed
         message_text = getattr(message_obj, 'message', "")
 
         # Access the partial_messages state for this request_id
@@ -68,7 +63,7 @@ async def handle_server_input(chat_handler):
         msg_state = partial_messages[request_id]
 
         if partial:
-            # We are receiving a partial chunk
+            # Handle partial chunk
             msg_state["chunks"].append(message_text)
 
             # Start or update the streaming UI
@@ -87,7 +82,7 @@ async def handle_server_input(chat_handler):
                 msg_state["ui_renderer"].update_streaming(message_text)
 
         else:
-            # This is a final (non-partial) message
+            # Final message
             msg_state["chunks"].append(message_text)
             full_prompt = "".join(msg_state["chunks"])
             msg_state["finalized"] = True
@@ -119,41 +114,26 @@ async def handle_server_input(chat_handler):
                     chat_handler.stream,
                     chat_handler.local_name,
                     console,
-                    request_id=request_id  # Pass request_id to get_response if needed
+                    request_id=request_id
                 ),
                 full_prompt
             )
 
             chat_handler.conversation_manager.add_message("responder", answer)
 
-            # Send the final response message back
-            try:
-                if chat_handler.stream and hasattr(chat_handler.responder_handler, "get_response_stream"):
-                    # If streaming was used, get_response_stream handles partial sending, now just finalize
-                    await chat_handler.output_adapter.write_message({
-                        "role": "Responder",
-                        "partial": False,
-                        "request_id": request_id
-                    })
-                else:
-                    # Normal non-streamed message
-                    await chat_handler.output_adapter.write_message({
-                        "role": "Responder",
-                        "message": answer,
-                        "request_id": request_id
-                    })
-                    msg_state["ui_renderer"].display_complete_message(
-                        server=chat_handler.server,
-                        local_name=chat_handler.local_name,
-                        remote_name=chat_handler.remote_name,
-                        role="responder",
-                        content=answer
-                    )
-            except (ConnectionClosedError, EOFError) as e:
-                log.debug(f"Failed to send responder message: {e}")
+            # Only display the final complete message here if we're NOT streaming.
+            # In streaming mode, get_response handles all UI updates, including the final state.
+            if not chat_handler.stream:
+                msg_state["ui_renderer"].display_complete_message(
+                    server=chat_handler.server,
+                    local_name=chat_handler.local_name,
+                    remote_name=chat_handler.remote_name,
+                    role="responder",
+                    content=answer
+                )
 
             # After responding, show the prompt again
             await msg_state["ui_renderer"].after_message(server_mode=chat_handler.server)
 
-            # Remove the request_id from partial_messages since we're done
+            # Remove the request_id since we're done with this message
             del partial_messages[request_id]
